@@ -1,6 +1,6 @@
 # Foundry Cache Boost
 
-![Coverage](./badges/coverage.svg)
+[![Continuous Integration](https://github.com/w3combo/foundry-cache-boost/actions/workflows/ci.yml/badge.svg)](https://github.com/w3combo/foundry-cache-boost/actions/workflows/ci.yml)
 
 Foundry Cache Boost is a GitHub Action that targets faster forge test runs on
 forked networks (mainnet or any real network) by reusing Foundry cache data
