@@ -1,4 +1,4 @@
-import { n as normalizeSlot, g as getInput, a as normalizeBlockIdentifier, p as parseRpcEndpointsJson, r as readStorageInputFile, e as ensureBoostCacheDir, b as getSlotHintsPath, c as buildCacheKeys, d as cacheExports, s as saveState, C as CACHE_PRIMARY_KEY_STATE, f as CACHE_MATCHED_KEY_STATE, i as info, h as readSlotHintsFile, j as getChainStorageRequest, k as setFailed } from './input-utils-FbEle3zG.js';
+import { n as normalizeSlot, g as getInput, a as normalizeBlockIdentifier, p as parseRpcEndpointsJson, e as ensureBoostCacheDir, b as getSlotHintsPath, c as buildCacheKeys, d as cacheExports, s as saveState, C as CACHE_PRIMARY_KEY_STATE, f as CACHE_MATCHED_KEY_STATE, i as info, r as readSlotHintsFile, h as setFailed } from './input-utils-o6p9vvww.js';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import 'os';
@@ -312,17 +312,6 @@ async function extractStorageValues(rpcUrl, storageInput, blockIdentifier) {
     return output;
 }
 
-function mergeSlots(base, hinted) {
-    const merged = { ...base };
-    if (!hinted) {
-        return merged;
-    }
-    for (const [address, slots] of Object.entries(hinted)) {
-        const existing = Array.isArray(merged[address]) ? merged[address] : [];
-        merged[address] = Array.from(new Set([...existing, ...slots]));
-    }
-    return merged;
-}
 async function writeStorageValues(chain, block, values) {
     const outputDir = join(process.env.HOME ?? process.env.USERPROFILE ?? '.', '.foundry', 'cache', 'foundry-cache-boost', 'storage-values', chain);
     await mkdir(outputDir, { recursive: true });
@@ -338,14 +327,12 @@ async function writeStorageValues(chain, block, values) {
 async function run() {
     try {
         const rawBlock = getInput('block', { required: true });
-        const storageInputPath = getInput('storage-input-path') || '.github/storage-input.json';
         const rpcEndpointsJson = getInput('rpc-endpoints-json', {
             required: true
         });
         const cacheKeyPrefix = getInput('cache-key-prefix') || 'foundry-cache-boost';
         const block = normalizeBlockIdentifier(rawBlock);
         const rpcEndpoints = parseRpcEndpointsJson(rpcEndpointsJson);
-        const storageInput = await readStorageInputFile(storageInputPath);
         await ensureBoostCacheDir();
         const cachePath = getSlotHintsPath();
         const cacheKeys = buildCacheKeys(cacheKeyPrefix);
@@ -360,14 +347,13 @@ async function run() {
         }
         const slotHints = await readSlotHintsFile();
         for (const [chain, rpcUrl] of Object.entries(rpcEndpoints)) {
-            const requested = getChainStorageRequest(storageInput, chain);
             const hintsForChain = slotHints?.chains[chain];
-            const mergedRequest = mergeSlots(requested, hintsForChain);
-            if (Object.keys(mergedRequest).length === 0) {
+            const requested = hintsForChain ?? {};
+            if (Object.keys(requested).length === 0) {
                 info(`Skipping chain ${chain}: no slots requested`);
                 continue;
             }
-            const values = await extractStorageValues(rpcUrl, mergedRequest, block);
+            const values = await extractStorageValues(rpcUrl, requested, block);
             await writeStorageValues(chain, block, values);
             const addressCount = Object.keys(values).length;
             const slotCount = Object.values(values).reduce((count, slotMap) => count + Object.keys(slotMap).length, 0);

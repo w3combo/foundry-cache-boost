@@ -53,20 +53,13 @@ jobs:
         id: checkout
         uses: actions/checkout@v6
 
-      - name: Prepare Action Inputs
-        id: prepare-inputs
-        run: |
-          mkdir -p .github
-          echo '{"chains":{}}' > .github/storage-input.ci.json
-
       - name: Test Local Action
         id: test-action
         uses: ./
         with:
           block: latest
-          storage-input-path: .github/storage-input.ci.json
           rpc-endpoints-json: '{"mainnet":"http://127.0.0.1:8545"}'
-          cache-key-prefix: foundry-cache-boost-ci-${{ github.run_id }}-${{ github.run_attempt }}
+          cache-key-prefix: foundry-cache-boost-ci-no-cache-${{ github.sha }}
 
   test-action:
     name: GitHub Actions Test
@@ -77,26 +70,19 @@ jobs:
         id: checkout
         uses: actions/checkout@v6
 
-      - name: Prepare Action Inputs
-        id: prepare-inputs
-        run: |
-          mkdir -p .github
-          echo '{"chains":{}}' > .github/storage-input.ci.json
-
       - name: Test Local Action ("new" run)
         id: test-action
         uses: ./
         with:
-          block: 440
-          storage-input-path: .github/storage-input.ci.json
-          rpc-endpoints-json: '{"mainnet":"http://127.0.0.1:8545"}'
-          cache-key-prefix: foundry-cache-boost-ci-${{ github.run_id }}-${{ github.run_attempt }}
-      
+          block: 24735604
+          rpc-endpoints-json: '{"mainnet":"https://eth.meowrpc.com"}'
+          cache-key-prefix: foundry-cache-boost-ci-mainnet
+
       - name: Mock Foundry Cache ("previous" run)
         id: mock-cache
         run: |
           mkdir -p ~/.foundry/cache/rpc/mainnet
-          echo << EOF > ~/.foundry/cache/rpc/mainnet/420
+          echo << EOF > ~/.foundry/cache/rpc/mainnet/24735602
           {
             "storage": {
               "0xbb256c2f1b677e27118b0345fd2b3894d2e6d487": {

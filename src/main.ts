@@ -11,30 +11,10 @@ import {
   readSlotHintsFile
 } from './cache-utils.js'
 import {
-  getChainStorageRequest,
   normalizeBlockIdentifier,
-  parseRpcEndpointsJson,
-  readStorageInputFile
+  parseRpcEndpointsJson
 } from './input-utils.js'
 import { extractStorageValues } from './storage-extractor.js'
-
-function mergeSlots(
-  base: Record<string, unknown[]>,
-  hinted: Record<string, string[]> | undefined
-): Record<string, unknown[]> {
-  const merged: Record<string, unknown[]> = { ...base }
-
-  if (!hinted) {
-    return merged
-  }
-
-  for (const [address, slots] of Object.entries(hinted)) {
-    const existing = Array.isArray(merged[address]) ? merged[address] : []
-    merged[address] = Array.from(new Set([...existing, ...slots]))
-  }
-
-  return merged
-}
 
 async function writeStorageValues(
   chain: string,
@@ -64,8 +44,6 @@ async function writeStorageValues(
 export async function run(): Promise<void> {
   try {
     const rawBlock: string = core.getInput('block', { required: true })
-    const storageInputPath: string =
-      core.getInput('storage-input-path') || '.github/storage-input.json'
     const rpcEndpointsJson: string = core.getInput('rpc-endpoints-json', {
       required: true
     })
@@ -74,7 +52,6 @@ export async function run(): Promise<void> {
 
     const block = normalizeBlockIdentifier(rawBlock)
     const rpcEndpoints = parseRpcEndpointsJson(rpcEndpointsJson)
-    const storageInput = await readStorageInputFile(storageInputPath)
 
     await ensureBoostCacheDir()
 
@@ -100,16 +77,15 @@ export async function run(): Promise<void> {
     const slotHints = await readSlotHintsFile()
 
     for (const [chain, rpcUrl] of Object.entries(rpcEndpoints)) {
-      const requested = getChainStorageRequest(storageInput, chain)
       const hintsForChain = slotHints?.chains[chain]
-      const mergedRequest = mergeSlots(requested, hintsForChain)
+      const requested = hintsForChain ?? {}
 
-      if (Object.keys(mergedRequest).length === 0) {
+      if (Object.keys(requested).length === 0) {
         core.info(`Skipping chain ${chain}: no slots requested`)
         continue
       }
 
-      const values = await extractStorageValues(rpcUrl, mergedRequest, block)
+      const values = await extractStorageValues(rpcUrl, requested, block)
       await writeStorageValues(chain, block, values)
 
       const addressCount = Object.keys(values).length

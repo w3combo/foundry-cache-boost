@@ -42,23 +42,13 @@ jest.unstable_mockModule('../src/cache-utils.js', () => ({
   readSlotHintsFile
 }))
 
-const getChainStorageRequest =
-  jest.fn<(parsed: unknown, chain: string) => Record<string, unknown[]>>()
 const normalizeBlockIdentifier = jest.fn<(block: string) => string>()
 const parseRpcEndpointsJson =
   jest.fn<(value: string) => Record<string, string>>()
-const readStorageInputFile = jest.fn<
-  (path: string) => Promise<{
-    global?: Record<string, string[]>
-    chains: Record<string, Record<string, string[]>>
-  }>
->()
 
 jest.unstable_mockModule('../src/input-utils.js', () => ({
-  getChainStorageRequest,
   normalizeBlockIdentifier,
-  parseRpcEndpointsJson,
-  readStorageInputFile
+  parseRpcEndpointsJson
 }))
 
 const extractStorageValues =
@@ -81,7 +71,6 @@ describe('main.ts', () => {
   beforeEach(() => {
     core.getInput.mockImplementation((name: string) => {
       if (name === 'block') return 'latest'
-      if (name === 'storage-input-path') return './slots.json'
       if (name === 'rpc-endpoints-json') return '{"mainnet":"https://rpc"}'
       if (name === 'cache-key-prefix') return 'boost'
       return ''
@@ -96,15 +85,6 @@ describe('main.ts', () => {
     normalizeBlockIdentifier.mockReturnValue('latest')
     parseRpcEndpointsJson.mockReturnValue({
       mainnet: 'https://rpc'
-    })
-    readStorageInputFile.mockResolvedValue({
-      global: {
-        '0x1234567890abcdef1234567890abcdef12345678': ['0x0']
-      },
-      chains: {}
-    })
-    getChainStorageRequest.mockReturnValue({
-      '0x1234567890abcdef1234567890abcdef12345678': ['0x0']
     })
     readSlotHintsFile.mockResolvedValue({
       chains: {
@@ -136,11 +116,10 @@ describe('main.ts', () => {
     expect(core.getInput).toHaveBeenNthCalledWith(1, 'block', {
       required: true
     })
-    expect(core.getInput).toHaveBeenNthCalledWith(2, 'storage-input-path')
-    expect(core.getInput).toHaveBeenNthCalledWith(3, 'rpc-endpoints-json', {
+    expect(core.getInput).toHaveBeenNthCalledWith(2, 'rpc-endpoints-json', {
       required: true
     })
-    expect(core.getInput).toHaveBeenNthCalledWith(4, 'cache-key-prefix')
+    expect(core.getInput).toHaveBeenNthCalledWith(3, 'cache-key-prefix')
 
     expect(ensureBoostCacheDir).toHaveBeenCalledTimes(1)
     expect(restoreCache).toHaveBeenNthCalledWith(
@@ -164,7 +143,7 @@ describe('main.ts', () => {
       1,
       'https://rpc',
       {
-        '0x1234567890abcdef1234567890abcdef12345678': ['0x0', '0x1']
+        '0x1234567890abcdef1234567890abcdef12345678': ['0x1']
       },
       'latest'
     )
@@ -180,20 +159,27 @@ describe('main.ts', () => {
     expect(core.setFailed).toHaveBeenNthCalledWith(1, 'bad block')
   })
 
-  it('Uses default storage input path when input is omitted', async () => {
+  it('Skips extraction when slot hints are not available for a chain', async () => {
     core.getInput.mockImplementation((name: string) => {
       if (name === 'block') return 'latest'
-      if (name === 'storage-input-path') return ''
       if (name === 'rpc-endpoints-json') return '{"mainnet":"https://rpc"}'
       if (name === 'cache-key-prefix') return 'boost'
       return ''
     })
+    readSlotHintsFile.mockResolvedValueOnce({
+      chains: {},
+      meta: {
+        generatedAt: '2026-03-25T00:00:00.000Z',
+        block: 'latest',
+        window: 128
+      }
+    })
 
     await run()
 
-    expect(readStorageInputFile).toHaveBeenNthCalledWith(
-      1,
-      '.github/storage-input.json'
+    expect(extractStorageValues).not.toHaveBeenCalled()
+    expect(core.info).toHaveBeenCalledWith(
+      'Skipping chain mainnet: no slots requested'
     )
   })
 })

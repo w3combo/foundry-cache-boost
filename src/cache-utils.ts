@@ -69,11 +69,11 @@ export function buildCacheKeys(prefix: string): {
   const runner = sanitize(process.env.RUNNER_OS ?? process.platform)
   const repo = sanitize(process.env.GITHUB_REPOSITORY ?? 'local')
   const ref = sanitize(process.env.GITHUB_REF_NAME ?? 'unknown-ref')
-  const runId = sanitize(process.env.GITHUB_RUN_ID ?? `${Date.now()}`)
+  const sha = sanitize(process.env.GITHUB_SHA ?? 'unknown-sha')
   const base = `${sanitize(prefix)}-${runner}-${repo}-${ref}`
 
   return {
-    primaryKey: `${base}-${runId}`,
+    primaryKey: `${base}-${sha}`,
     restoreKeys: [`${base}-`, `${sanitize(prefix)}-${runner}-${repo}-`]
   }
 }
