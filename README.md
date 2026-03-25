@@ -10,7 +10,7 @@ Current milestone scope:
 
 - Main step restores slot hints from GitHub Actions cache and fetches storage
   values.
-- Post-job step scans ~/.foundry/cache/rpc/<chain>/ files and persists used
+- Post-job step scans `~/.foundry/cache/rpc/<chain>/` files and persists used
   slots.
 - Bytecode caching is planned for a later iteration.
 
