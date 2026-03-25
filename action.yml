@@ -16,7 +16,8 @@ inputs:
     default: latest
   storage-input-path:
     description: Path to a JSON file describing address to storage slots mapping
-    required: true
+    required: false
+    default: .github/storage-input.json
   rpc-endpoints-json:
     description: JSON object mapping chain names to RPC URLs
     required: true

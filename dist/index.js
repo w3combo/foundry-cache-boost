@@ -1,4 +1,4 @@
-import { n as normalizeSlot, g as getInput, a as normalizeBlockIdentifier, p as parseRpcEndpointsJson, r as readStorageInputFile, e as ensureBoostCacheDir, b as getSlotHintsPath, c as buildCacheKeys, d as cacheExports, s as saveState, C as CACHE_PRIMARY_KEY_STATE, f as CACHE_MATCHED_KEY_STATE, i as info, h as readSlotHintsFile, j as getChainStorageRequest, k as setFailed } from './input-utils-Bu0Y0prN.js';
+import { n as normalizeSlot, g as getInput, a as normalizeBlockIdentifier, p as parseRpcEndpointsJson, r as readStorageInputFile, e as ensureBoostCacheDir, b as getSlotHintsPath, c as buildCacheKeys, d as cacheExports, s as saveState, C as CACHE_PRIMARY_KEY_STATE, f as CACHE_MATCHED_KEY_STATE, i as info, h as readSlotHintsFile, j as getChainStorageRequest, k as setFailed } from './input-utils-FbEle3zG.js';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import 'os';
@@ -338,9 +338,7 @@ async function writeStorageValues(chain, block, values) {
 async function run() {
     try {
         const rawBlock = getInput('block', { required: true });
-        const storageInputPath = getInput('storage-input-path', {
-            required: true
-        });
+        const storageInputPath = getInput('storage-input-path') || '.github/storage-input.json';
         const rpcEndpointsJson = getInput('rpc-endpoints-json', {
             required: true
         });

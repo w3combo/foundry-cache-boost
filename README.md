@@ -22,7 +22,8 @@ The action currently exposes one input.
   - Required: yes
   - Default: latest
 - storage-input-path: Path to JSON file with address->slots mapping.
-  - Required: yes
+  - Required: no
+  - Default: .github/storage-input.json
 - rpc-endpoints-json: JSON object mapping chain names to RPC URLs.
   - Required: yes
 - cache-key-prefix: Prefix used for cache keys.

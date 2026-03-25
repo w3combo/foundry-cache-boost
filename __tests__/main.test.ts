@@ -136,9 +136,7 @@ describe('main.ts', () => {
     expect(core.getInput).toHaveBeenNthCalledWith(1, 'block', {
       required: true
     })
-    expect(core.getInput).toHaveBeenNthCalledWith(2, 'storage-input-path', {
-      required: true
-    })
+    expect(core.getInput).toHaveBeenNthCalledWith(2, 'storage-input-path')
     expect(core.getInput).toHaveBeenNthCalledWith(3, 'rpc-endpoints-json', {
       required: true
     })
@@ -180,5 +178,22 @@ describe('main.ts', () => {
     await run()
 
     expect(core.setFailed).toHaveBeenNthCalledWith(1, 'bad block')
+  })
+
+  it('Uses default storage input path when input is omitted', async () => {
+    core.getInput.mockImplementation((name: string) => {
+      if (name === 'block') return 'latest'
+      if (name === 'storage-input-path') return ''
+      if (name === 'rpc-endpoints-json') return '{"mainnet":"https://rpc"}'
+      if (name === 'cache-key-prefix') return 'boost'
+      return ''
+    })
+
+    await run()
+
+    expect(readStorageInputFile).toHaveBeenNthCalledWith(
+      1,
+      '.github/storage-input.json'
+    )
   })
 })

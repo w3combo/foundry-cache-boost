@@ -64,9 +64,8 @@ async function writeStorageValues(
 export async function run(): Promise<void> {
   try {
     const rawBlock: string = core.getInput('block', { required: true })
-    const storageInputPath: string = core.getInput('storage-input-path', {
-      required: true
-    })
+    const storageInputPath: string =
+      core.getInput('storage-input-path') || '.github/storage-input.json'
     const rpcEndpointsJson: string = core.getInput('rpc-endpoints-json', {
       required: true
     })
