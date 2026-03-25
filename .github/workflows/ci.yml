@@ -44,8 +44,8 @@ jobs:
         id: npm-ci-test
         run: npm run ci-test
 
-  test-action-no-cache:
-    name: GitHub Actions Test (no cache)
+  test-action-seed-cache:
+    name: GitHub Actions Test (seed cache)
     runs-on: ubuntu-latest
 
     steps:
@@ -53,24 +53,7 @@ jobs:
         id: checkout
         uses: actions/checkout@v6
 
-      - name: Test Local Action
-        id: test-action
-        uses: ./
-        with:
-          block: latest
-          rpc-endpoints-json: '{"mainnet":"http://127.0.0.1:8545"}'
-          cache-key-prefix: foundry-cache-boost-ci-no-cache-${{ github.sha }}
-
-  test-action:
-    name: GitHub Actions Test
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        id: checkout
-        uses: actions/checkout@v6
-
-      - name: Test Local Action ("new" run)
+      - name: Test Local Action (seed run)
         id: test-action
         uses: ./
         with:
@@ -78,11 +61,11 @@ jobs:
           rpc-endpoints-json: '{"mainnet":"https://eth.meowrpc.com"}'
           cache-key-prefix: foundry-cache-boost-ci-mainnet
 
-      - name: Mock Foundry Cache ("previous" run)
+      - name: Mock Foundry Cache (previous run data)
         id: mock-cache
         run: |
           mkdir -p ~/.foundry/cache/rpc/mainnet
-          echo << EOF > ~/.foundry/cache/rpc/mainnet/24735602
+          cat > ~/.foundry/cache/rpc/mainnet/24735602 << 'EOF'
           {
             "storage": {
               "0xbb256c2f1b677e27118b0345fd2b3894d2e6d487": {
@@ -98,3 +81,30 @@ jobs:
             }
           }
           EOF
+
+  test-action-follow-up:
+    name: GitHub Actions Test (follow-up restore)
+    runs-on: ubuntu-latest
+    needs: test-action-seed-cache
+
+    steps:
+      - name: Checkout
+        id: checkout
+        uses: actions/checkout@v6
+
+      - name: Test Local Action (follow-up run)
+        id: test-action-follow-up
+        uses: ./
+        with:
+          block: 24735604
+          rpc-endpoints-json: '{"mainnet":"https://eth.meowrpc.com"}'
+          cache-key-prefix: foundry-cache-boost-ci-mainnet
+
+      - name: Assert mocked slots were restored
+        id: assert-restored-slots
+        run: |
+          SLOT_HINTS_PATH="$HOME/.foundry/cache/foundry-cache-boost/slot-hints.json"
+          test -f "$SLOT_HINTS_PATH"
+          grep -q '"mainnet"' "$SLOT_HINTS_PATH"
+          grep -q '"0xbb256c2f1b677e27118b0345fd2b3894d2e6d487"' "$SLOT_HINTS_PATH"
+          grep -q '"0x8"' "$SLOT_HINTS_PATH"
