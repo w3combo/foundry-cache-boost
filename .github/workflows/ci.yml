@@ -53,12 +53,17 @@ jobs:
         id: checkout
         uses: actions/checkout@v6
 
+      - name: Prepare Action Inputs
+        id: prepare-inputs
+        run: |
+          mkdir -p .github
+          echo '{"chains":{}}' > .github/storage-input.ci.json
+
       - name: Test Local Action
         id: test-action
         uses: ./
         with:
-          milliseconds: 2000
-
-      - name: Print Output
-        id: output
-        run: echo "${{ steps.test-action.outputs.time }}"
+          block: latest
+          storage-input-path: .github/storage-input.ci.json
+          rpc-endpoints-json: '{"mainnet":"http://127.0.0.1:8545"}'
+          cache-key-prefix: foundry-cache-boost-ci-${{ github.run_id }}-${{ github.run_attempt }}
