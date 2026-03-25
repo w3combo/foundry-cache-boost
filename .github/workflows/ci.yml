@@ -83,7 +83,16 @@ jobs:
           mkdir -p .github
           echo '{"chains":{}}' > .github/storage-input.ci.json
 
-      - name: Mock Foundry Cache
+      - name: Test Local Action ("new" run)
+        id: test-action
+        uses: ./
+        with:
+          block: 440
+          storage-input-path: .github/storage-input.ci.json
+          rpc-endpoints-json: '{"mainnet":"http://127.0.0.1:8545"}'
+          cache-key-prefix: foundry-cache-boost-ci-${{ github.run_id }}-${{ github.run_attempt }}
+      
+      - name: Mock Foundry Cache ("previous" run)
         id: mock-cache
         run: |
           mkdir -p ~/.foundry/cache/rpc/mainnet
@@ -103,12 +112,3 @@ jobs:
             }
           }
           EOF
-
-      - name: Test Local Action
-        id: test-action
-        uses: ./
-        with:
-          block: 440
-          storage-input-path: .github/storage-input.ci.json
-          rpc-endpoints-json: '{"mainnet":"http://127.0.0.1:8545"}'
-          cache-key-prefix: foundry-cache-boost-ci-${{ github.run_id }}-${{ github.run_attempt }}
