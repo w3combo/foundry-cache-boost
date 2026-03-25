@@ -63,12 +63,33 @@ jest.unstable_mockModule('../src/storage-extractor.js', () => ({
   extractStorageValues
 }))
 
+const mkdir =
+  jest.fn<(path: string, options?: { recursive?: boolean }) => Promise<void>>()
+const stat =
+  jest.fn<
+    (
+      path: string
+    ) => Promise<{ isDirectory: () => boolean; isFile: () => boolean }>
+  >()
+const readFile = jest.fn<(path: string, encoding: string) => Promise<string>>()
+const writeFile =
+  jest.fn<(path: string, data: string, encoding: string) => Promise<void>>()
+
+jest.unstable_mockModule('node:fs/promises', () => ({
+  mkdir,
+  readFile,
+  stat,
+  writeFile
+}))
+
 // The module being tested should be imported dynamically. This ensures that the
 // mocks are used in place of any actual dependencies.
 const { run } = await import('../src/main.js')
 
 describe('main.ts', () => {
   beforeEach(() => {
+    process.env.HOME = '/home/tester'
+
     core.getInput.mockImplementation((name: string) => {
       if (name === 'block') return 'latest'
       if (name === 'rpc-endpoints-json') return '{"mainnet":"https://rpc"}'
@@ -104,6 +125,10 @@ describe('main.ts', () => {
         '0x1': '0x2'
       }
     })
+
+    stat.mockRejectedValue(
+      Object.assign(new Error('missing'), { code: 'ENOENT' })
+    )
   })
 
   afterEach(() => {
@@ -147,6 +172,19 @@ describe('main.ts', () => {
       },
       'latest'
     )
+
+    expect(mkdir).toHaveBeenNthCalledWith(
+      1,
+      '/home/tester/.foundry/cache/rpc/mainnet',
+      { recursive: true }
+    )
+    expect(writeFile).toHaveBeenCalledTimes(1)
+    expect(writeFile).toHaveBeenNthCalledWith(
+      1,
+      '/home/tester/.foundry/cache/rpc/mainnet/latest',
+      expect.stringContaining('"storage"'),
+      'utf-8'
+    )
   })
 
   it('Sets a failed status', async () => {
@@ -181,5 +219,76 @@ describe('main.ts', () => {
     expect(core.info).toHaveBeenCalledWith(
       'Skipping chain mainnet: no slots requested'
     )
+  })
+
+  it('Skips writing when target block path is a directory', async () => {
+    stat.mockResolvedValueOnce({
+      isDirectory: () => true,
+      isFile: () => false
+    })
+
+    await run()
+
+    expect(readFile).not.toHaveBeenCalled()
+    expect(writeFile).not.toHaveBeenCalled()
+    expect(core.info).toHaveBeenCalledWith(
+      'Skipping /home/tester/.foundry/cache/rpc/mainnet/latest: path is a directory'
+    )
+  })
+
+  it('Skips writing when existing file has malformed JSON', async () => {
+    stat.mockResolvedValueOnce({
+      isDirectory: () => false,
+      isFile: () => true
+    })
+    readFile.mockResolvedValueOnce('{bad json')
+
+    await run()
+
+    expect(writeFile).not.toHaveBeenCalled()
+    expect(core.info).toHaveBeenCalledWith(
+      'Skipping /home/tester/.foundry/cache/rpc/mainnet/latest: malformed JSON'
+    )
+  })
+
+  it('Merges fetched storage with an existing valid block cache file', async () => {
+    stat.mockResolvedValueOnce({
+      isDirectory: () => false,
+      isFile: () => true
+    })
+    readFile.mockResolvedValueOnce(
+      JSON.stringify({
+        storage: {
+          '0x1234567890abcdef1234567890abcdef12345678': {
+            '0x0': '0xold',
+            '0x1': '0xexisting'
+          },
+          '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa': {
+            '0x2': '0xkeep'
+          }
+        },
+        transactions: ['0xabc']
+      })
+    )
+
+    await run()
+
+    expect(writeFile).toHaveBeenCalledTimes(1)
+    const writtenContent = writeFile.mock.calls[0][1]
+    const parsed = JSON.parse(writtenContent) as {
+      storage: Record<string, Record<string, string>>
+      transactions: string[]
+    }
+
+    expect(parsed.transactions).toEqual(['0xabc'])
+    expect(parsed.storage).toEqual({
+      '0x1234567890abcdef1234567890abcdef12345678': {
+        '0x0': '0x1',
+        '0x1': '0x2'
+      },
+      '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa': {
+        '0x2': '0xkeep'
+      }
+    })
   })
 })

@@ -1,5 +1,5 @@
 import { d as debug, n as normalizeSlot, g as getInput, a as normalizeBlockIdentifier, p as parseRpcEndpointsJson, e as ensureBoostCacheDir, b as getSlotHintsPath, c as buildCacheKeys, f as cacheExports, s as saveState, C as CACHE_PRIMARY_KEY_STATE, h as CACHE_MATCHED_KEY_STATE, i as info, r as readSlotHintsFile, j as setFailed } from './input-utils-CwJwCTPx.js';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, stat, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import 'os';
 import 'crypto';
@@ -323,11 +323,90 @@ async function extractStorageValues(rpcUrl, storageInput, blockIdentifier) {
     return output;
 }
 
+function parseStorageField(storage) {
+    if (!storage || typeof storage !== 'object' || Array.isArray(storage)) {
+        return {};
+    }
+    const parsed = {};
+    for (const [address, slotsValue] of Object.entries(storage)) {
+        if (!slotsValue ||
+            typeof slotsValue !== 'object' ||
+            Array.isArray(slotsValue)) {
+            continue;
+        }
+        parsed[address] = {};
+        for (const [slot, value] of Object.entries(slotsValue)) {
+            if (typeof value === 'string') {
+                parsed[address][slot] = value;
+            }
+        }
+    }
+    return parsed;
+}
+function mergeStorageValues(existing, fetched) {
+    const merged = {};
+    for (const [address, slots] of Object.entries(existing)) {
+        merged[address] = { ...slots };
+    }
+    for (const [address, slots] of Object.entries(fetched)) {
+        if (!merged[address]) {
+            merged[address] = {};
+        }
+        for (const [slot, value] of Object.entries(slots)) {
+            merged[address][slot] = value;
+        }
+    }
+    return merged;
+}
 async function writeStorageValues(chain, block, values) {
-    const outputDir = join(process.env.HOME ?? process.env.USERPROFILE ?? '.', '.foundry', 'cache', 'foundry-cache-boost', 'storage-values', chain);
+    const outputDir = join(process.env.HOME ?? process.env.USERPROFILE ?? '.', '.foundry', 'cache', 'rpc', chain);
     await mkdir(outputDir, { recursive: true });
-    const outputPath = join(outputDir, `${block}.json`);
-    const rendered = `${JSON.stringify({ storage: values }, null, 2)}\n`;
+    const outputPath = join(outputDir, block);
+    let outputRoot = {};
+    try {
+        const outputPathStats = await stat(outputPath);
+        if (outputPathStats.isDirectory()) {
+            info(`Skipping ${outputPath}: path is a directory`);
+            return;
+        }
+        if (!outputPathStats.isFile()) {
+            info(`Skipping ${outputPath}: path is not a regular file`);
+            return;
+        }
+        let existingRaw;
+        try {
+            existingRaw = await readFile(outputPath, 'utf-8');
+        }
+        catch {
+            info(`Skipping ${outputPath}: file is unreadable`);
+            return;
+        }
+        let existingParsed;
+        try {
+            existingParsed = JSON.parse(existingRaw);
+        }
+        catch {
+            info(`Skipping ${outputPath}: malformed JSON`);
+            return;
+        }
+        if (!existingParsed ||
+            typeof existingParsed !== 'object' ||
+            Array.isArray(existingParsed)) {
+            info(`Skipping ${outputPath}: expected JSON object at root`);
+            return;
+        }
+        outputRoot = existingParsed;
+    }
+    catch (error) {
+        const ioError = error;
+        if (ioError.code !== 'ENOENT') {
+            info(`Skipping ${outputPath}: unable to access existing path`);
+            return;
+        }
+    }
+    const existingStorage = parseStorageField(outputRoot.storage);
+    const mergedStorage = mergeStorageValues(existingStorage, values);
+    const rendered = `${JSON.stringify({ ...outputRoot, storage: mergedStorage }, null, 2)}\n`;
     await writeFile(outputPath, rendered, 'utf-8');
 }
 /**

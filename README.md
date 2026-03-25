@@ -4,7 +4,8 @@
 
 Foundry Cache Boost is a GitHub Action that targets faster forge test runs on
 forked networks (mainnet or any live network) by storing used storage slots keys
-from previous runs and getting back all the slots values in batch before next runs.
+from previous runs and getting back all the slots values in batch before next
+runs.
 
 ## Input
 
@@ -21,6 +22,14 @@ The action currently exposes these inputs.
 
 Slot hints are managed internally by the action in the Foundry cache directory
 and persisted through GitHub Actions cache between runs.
+
+When slot hints are available, the action fetches slot values ahead of test runs
+and merges them into Foundry's RPC cache block files at:
+
+- $HOME/.foundry/cache/rpc/<chain>/<block>
+
+If a block path already exists and is not a valid JSON file, it is left
+untouched.
 
 ## Usage
 
@@ -53,7 +62,7 @@ jobs:
 
 - [x] Getting back slots keys after test runs and storing them in the cache
 - [x] Getting back slots values in batch before test runs
-- [ ] Patch Foundry's RPC cache with "fake blocks" containing the extracted values
+- [x] Patch Foundry's RPC cache with "fake blocks" containing the extracted values
 - [ ] Cache deployed bytecode and code hashes
 
 ## Development

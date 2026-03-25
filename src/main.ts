@@ -1,6 +1,6 @@
 import * as core from '@actions/core'
 import * as cache from '@actions/cache'
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import {
   CACHE_MATCHED_KEY_STATE,
@@ -16,23 +16,128 @@ import {
 } from './input-utils.js'
 import { extractStorageValues } from './storage-extractor.js'
 
+type SlotValuesByAddress = Record<string, Record<string, string>>
+
+function parseStorageField(storage: unknown): SlotValuesByAddress {
+  if (!storage || typeof storage !== 'object' || Array.isArray(storage)) {
+    return {}
+  }
+
+  const parsed: SlotValuesByAddress = {}
+
+  for (const [address, slotsValue] of Object.entries(storage)) {
+    if (
+      !slotsValue ||
+      typeof slotsValue !== 'object' ||
+      Array.isArray(slotsValue)
+    ) {
+      continue
+    }
+
+    parsed[address] = {}
+    for (const [slot, value] of Object.entries(slotsValue)) {
+      if (typeof value === 'string') {
+        parsed[address][slot] = value
+      }
+    }
+  }
+
+  return parsed
+}
+
+function mergeStorageValues(
+  existing: SlotValuesByAddress,
+  fetched: SlotValuesByAddress
+): SlotValuesByAddress {
+  const merged: SlotValuesByAddress = {}
+
+  for (const [address, slots] of Object.entries(existing)) {
+    merged[address] = { ...slots }
+  }
+
+  for (const [address, slots] of Object.entries(fetched)) {
+    if (!merged[address]) {
+      merged[address] = {}
+    }
+
+    for (const [slot, value] of Object.entries(slots)) {
+      merged[address][slot] = value
+    }
+  }
+
+  return merged
+}
+
 async function writeStorageValues(
   chain: string,
   block: string,
-  values: Record<string, Record<string, string>>
+  values: SlotValuesByAddress
 ): Promise<void> {
   const outputDir = join(
     process.env.HOME ?? process.env.USERPROFILE ?? '.',
     '.foundry',
     'cache',
-    'foundry-cache-boost',
-    'storage-values',
+    'rpc',
     chain
   )
   await mkdir(outputDir, { recursive: true })
 
-  const outputPath = join(outputDir, `${block}.json`)
-  const rendered = `${JSON.stringify({ storage: values }, null, 2)}\n`
+  const outputPath = join(outputDir, block)
+  let outputRoot: Record<string, unknown> = {}
+
+  try {
+    const outputPathStats = await stat(outputPath)
+    if (outputPathStats.isDirectory()) {
+      core.debug(`Skipping ${outputPath}: path is a directory`)
+      return
+    }
+
+    if (!outputPathStats.isFile()) {
+      core.debug(`Skipping ${outputPath}: path is not a regular file`)
+      return
+    }
+
+    let existingRaw: string
+    try {
+      existingRaw = await readFile(outputPath, 'utf-8')
+    } catch {
+      core.debug(`Skipping ${outputPath}: file is unreadable`)
+      return
+    }
+
+    let existingParsed: unknown
+    try {
+      existingParsed = JSON.parse(existingRaw)
+    } catch {
+      core.debug(`Skipping ${outputPath}: malformed JSON`)
+      return
+    }
+
+    if (
+      !existingParsed ||
+      typeof existingParsed !== 'object' ||
+      Array.isArray(existingParsed)
+    ) {
+      core.debug(`Skipping ${outputPath}: expected JSON object at root`)
+      return
+    }
+
+    outputRoot = existingParsed as Record<string, unknown>
+  } catch (error) {
+    const ioError = error as NodeJS.ErrnoException
+    if (ioError.code !== 'ENOENT') {
+      core.debug(`Skipping ${outputPath}: unable to access existing path`)
+      return
+    }
+  }
+
+  const existingStorage = parseStorageField(outputRoot.storage)
+  const mergedStorage = mergeStorageValues(existingStorage, values)
+  const rendered = `${JSON.stringify(
+    { ...outputRoot, storage: mergedStorage },
+    null,
+    2
+  )}\n`
   await writeFile(outputPath, rendered, 'utf-8')
 }
 
