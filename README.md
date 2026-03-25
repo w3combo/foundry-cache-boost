@@ -3,16 +3,8 @@
 [![Continuous Integration](https://github.com/w3combo/foundry-cache-boost/actions/workflows/ci.yml/badge.svg)](https://github.com/w3combo/foundry-cache-boost/actions/workflows/ci.yml)
 
 Foundry Cache Boost is a GitHub Action that targets faster forge test runs on
-forked networks (mainnet or any real network) by reusing Foundry cache data
-across workflow runs.
-
-Current milestone scope:
-
-- Main step restores slot hints from GitHub Actions cache and fetches storage
-  values.
-- Post-job step scans `~/.foundry/cache/rpc/<chain>/` files and persists used
-  slots.
-- Bytecode caching is planned for a later iteration.
+forked networks (mainnet or any live network) by storing used storage slots keys
+from previous runs and getting back all the slots values in batch before next runs.
 
 ## Input
 
@@ -56,6 +48,13 @@ jobs:
       - name: Run tests
         run: forge test
 ```
+
+## Roadmap
+
+- [x] Getting back slots keys after test runs and storing them in the cache
+- [x] Getting back slots values in batch before test runs
+- [ ] Patch Foundry's RPC cache with "fake blocks" containing the real slots values 
+- [ ] Cache deployed bytecode and code hashes
 
 ## Development
 
