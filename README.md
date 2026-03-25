@@ -26,7 +26,7 @@ and persisted through GitHub Actions cache between runs.
 When slot hints are available, the action fetches slot values ahead of test runs
 and merges them into Foundry's RPC cache block files at:
 
-- $HOME/.foundry/cache/rpc/<chain>/<block>
+- `$HOME/.foundry/cache/rpc/<chain>/<block>`
 
 If a block path already exists and is not a valid JSON file, it is left
 untouched.
