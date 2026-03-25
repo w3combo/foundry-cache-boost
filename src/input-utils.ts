@@ -1,11 +1,5 @@
 const ADDRESS_PATTERN = /^0x[0-9a-fA-F]{40}$/
-const BLOCK_TAGS = new Set([
-  'latest',
-  'earliest',
-  'pending',
-  'safe',
-  'finalized'
-])
+const BLOCK_TAGS = new Set(['latest', 'earliest', 'pending', 'safe', 'finalized'])
 
 function isAddress(value: string): boolean {
   return ADDRESS_PATTERN.test(value)
@@ -18,15 +12,11 @@ function normalizeRpcUrl(value: string): string {
   }
 
   if (candidate.startsWith('ws://') || candidate.startsWith('wss://')) {
-    throw new Error(
-      `WebSocket RPC URLs are not supported for this action: ${candidate}`
-    )
+    throw new Error(`WebSocket RPC URLs are not supported for this action: ${candidate}`)
   }
 
   const withProtocol =
-    candidate.startsWith('http://') || candidate.startsWith('https://')
-      ? candidate
-      : `http://${candidate}`
+    candidate.startsWith('http://') || candidate.startsWith('https://') ? candidate : `http://${candidate}`
 
   let parsed: URL
   try {
@@ -131,9 +121,7 @@ export function normalizeBlockIdentifier(rawBlock: string): string {
     return `0x${BigInt(block).toString(16)}`
   }
 
-  throw new Error(
-    'Invalid block input. Use latest/pending/safe/finalized/earliest, hex, or decimal'
-  )
+  throw new Error('Invalid block input. Use latest/pending/safe/finalized/earliest, hex, or decimal')
 }
 
 export function parseNumericBlock(blockIdentifier: string): bigint | undefined {
@@ -152,11 +140,7 @@ export function parseNumericBlock(blockIdentifier: string): bigint | undefined {
   return undefined
 }
 
-export function isBlockWithinWindow(
-  fileBlock: bigint,
-  targetBlock: bigint,
-  windowSize: bigint
-): boolean {
+export function isBlockWithinWindow(fileBlock: bigint, targetBlock: bigint, windowSize: bigint): boolean {
   const start = targetBlock > windowSize ? targetBlock - windowSize : 0n
   return fileBlock >= start && fileBlock <= targetBlock
 }

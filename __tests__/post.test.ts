@@ -7,10 +7,7 @@ jest.unstable_mockModule('@actions/cache', () => ({
   saveCache
 }))
 
-const readdir =
-  jest.fn<
-    (path: string, options?: { withFileTypes?: boolean }) => Promise<unknown[]>
-  >()
+const readdir = jest.fn<(path: string, options?: { withFileTypes?: boolean }) => Promise<unknown[]>>()
 const readFile = jest.fn<(path: string, encoding: string) => Promise<string>>()
 const homedir = jest.fn<() => string>()
 
@@ -26,10 +23,7 @@ jest.unstable_mockModule('../src/cache-utils.js', () => ({
   writeSlotHintsFile
 }))
 
-const isBlockWithinWindow =
-  jest.fn<
-    (fileBlock: bigint, targetBlock: bigint, windowSize: bigint) => boolean
-  >()
+const isBlockWithinWindow = jest.fn<(fileBlock: bigint, targetBlock: bigint, windowSize: bigint) => boolean>()
 const normalizeBlockIdentifier = jest.fn<(raw: string) => string>()
 const parseNumericBlock = jest.fn<(block: string) => bigint | undefined>()
 
@@ -145,11 +139,7 @@ describe('post.ts', () => {
         })
       })
     )
-    expect(saveCache).toHaveBeenNthCalledWith(
-      1,
-      ['/tmp/slot-hints.json'],
-      'cache-primary'
-    )
+    expect(saveCache).toHaveBeenNthCalledWith(1, ['/tmp/slot-hints.json'], 'cache-primary')
   })
 
   it('Logs and continues when rpc cache directory is missing', async () => {
@@ -159,10 +149,7 @@ describe('post.ts', () => {
 
     await runPost()
 
-    expect(core.info).toHaveBeenNthCalledWith(
-      1,
-      `Foundry RPC cache directory does not exist: ${rpcRoot}`
-    )
+    expect(core.info).toHaveBeenNthCalledWith(1, `Foundry RPC cache directory does not exist: ${rpcRoot}`)
     expect(core.setFailed).not.toHaveBeenCalled()
   })
 
@@ -172,10 +159,7 @@ describe('post.ts', () => {
     await runPost()
 
     expect(saveCache).not.toHaveBeenCalled()
-    expect(core.info).toHaveBeenNthCalledWith(
-      1,
-      'Skipping save; cache key already matched: cache-primary'
-    )
+    expect(core.info).toHaveBeenNthCalledWith(1, 'Skipping save; cache key already matched: cache-primary')
   })
 
   it('Fails on unexpected errors', async () => {

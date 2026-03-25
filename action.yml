@@ -1,6 +1,5 @@
 name: Foundry Cache Boost
-description:
-  Speed up forge test on forked networks by reusing Foundry RPC cache data
+description: Speed up forge test on forked networks by reusing Foundry RPC cache data
 author: w3combo
 
 # Add your action's branding here. This will appear on the GitHub Marketplace.

@@ -10,11 +10,7 @@ import {
   getSlotHintsPath,
   writeSlotHintsFile
 } from './cache-utils.js'
-import {
-  isBlockWithinWindow,
-  normalizeBlockIdentifier,
-  parseNumericBlock
-} from './input-utils.js'
+import { isBlockWithinWindow, normalizeBlockIdentifier, parseNumericBlock } from './input-utils.js'
 
 function extractFileBlockNumber(fileName: string): bigint | undefined {
   const stem = basename(fileName, '.json')
@@ -29,20 +25,13 @@ function extractFileBlockNumber(fileName: string): bigint | undefined {
   return undefined
 }
 
-function addSlotsFromStorageMap(
-  chainMap: Record<string, Set<string>>,
-  storage: unknown
-): void {
+function addSlotsFromStorageMap(chainMap: Record<string, Set<string>>, storage: unknown): void {
   if (!storage || typeof storage !== 'object' || Array.isArray(storage)) {
     return
   }
 
   for (const [address, slotsValue] of Object.entries(storage)) {
-    if (
-      !slotsValue ||
-      typeof slotsValue !== 'object' ||
-      Array.isArray(slotsValue)
-    ) {
+    if (!slotsValue || typeof slotsValue !== 'object' || Array.isArray(slotsValue)) {
       continue
     }
 
@@ -79,9 +68,7 @@ function toSerializableChains(
  */
 export async function runPost(): Promise<void> {
   const rpcCacheDir = join(homedir(), '.foundry', 'cache', 'rpc')
-  const block = normalizeBlockIdentifier(
-    core.getInput('block', { required: true })
-  )
+  const block = normalizeBlockIdentifier(core.getInput('block', { required: true }))
   const numericBlock = parseNumericBlock(block)
   const windowSize = getCacheWindow()
 
@@ -111,10 +98,7 @@ export async function runPost(): Promise<void> {
 
         if (numericBlock !== undefined) {
           const fileBlock = extractFileBlockNumber(child.name)
-          if (
-            fileBlock === undefined ||
-            !isBlockWithinWindow(fileBlock, numericBlock, windowSize)
-          ) {
+          if (fileBlock === undefined || !isBlockWithinWindow(fileBlock, numericBlock, windowSize)) {
             continue
           }
         }

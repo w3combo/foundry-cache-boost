@@ -1,7 +1,7 @@
 {
   "name": "foundry-cache-boost",
   "description": "GitHub Action to speed up forge test on forked networks by reusing Foundry RPC cache data",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "author": "",
   "type": "module",
   "private": true,

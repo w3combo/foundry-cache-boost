@@ -1,4 +1,4 @@
-import { a as normalizeBlockIdentifier, g as getInput, k as parseNumericBlock, i as info, l as isBlockWithinWindow, w as writeSlotHintsFile, m as getState, C as CACHE_PRIMARY_KEY_STATE, h as CACHE_MATCHED_KEY_STATE, o as warning, f as cacheExports, b as getSlotHintsPath, j as setFailed, q as getCacheWindow } from './input-utils-CwJwCTPx.js';
+import { a as normalizeBlockIdentifier, g as getInput, k as parseNumericBlock, i as info, l as isBlockWithinWindow, w as writeSlotHintsFile, m as getState, C as CACHE_PRIMARY_KEY_STATE, h as CACHE_MATCHED_KEY_STATE, o as warning, f as cacheExports, b as getSlotHintsPath, j as setFailed, q as getCacheWindow } from './input-utils-CpIwri7H.js';
 import { readdir, readFile } from 'node:fs/promises';
 import { join, basename } from 'node:path';
 import { homedir } from 'node:os';
@@ -58,9 +58,7 @@ function addSlotsFromStorageMap(chainMap, storage) {
         return;
     }
     for (const [address, slotsValue] of Object.entries(storage)) {
-        if (!slotsValue ||
-            typeof slotsValue !== 'object' ||
-            Array.isArray(slotsValue)) {
+        if (!slotsValue || typeof slotsValue !== 'object' || Array.isArray(slotsValue)) {
             continue;
         }
         if (!chainMap[address]) {
@@ -112,8 +110,7 @@ async function runPost() {
                 }
                 if (numericBlock !== undefined) {
                     const fileBlock = extractFileBlockNumber(child.name);
-                    if (fileBlock === undefined ||
-                        !isBlockWithinWindow(fileBlock, numericBlock, windowSize)) {
+                    if (fileBlock === undefined || !isBlockWithinWindow(fileBlock, numericBlock, windowSize)) {
                         continue;
                     }
                 }

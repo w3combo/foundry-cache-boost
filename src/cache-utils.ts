@@ -37,11 +37,7 @@ export async function readSlotHintsFile(): Promise<AggregatedSlotsPayload | null
   try {
     const content = await readFile(path, 'utf-8')
     const parsed = JSON.parse(content) as AggregatedSlotsPayload
-    if (
-      !parsed ||
-      typeof parsed !== 'object' ||
-      typeof parsed.chains !== 'object'
-    ) {
+    if (!parsed || typeof parsed !== 'object' || typeof parsed.chains !== 'object') {
       return null
     }
     return parsed
@@ -50,9 +46,7 @@ export async function readSlotHintsFile(): Promise<AggregatedSlotsPayload | null
   }
 }
 
-export async function writeSlotHintsFile(
-  payload: AggregatedSlotsPayload
-): Promise<void> {
+export async function writeSlotHintsFile(payload: AggregatedSlotsPayload): Promise<void> {
   await ensureBoostCacheDir()
   const rendered = `${JSON.stringify(payload, null, 2)}\n`
   await writeFile(getSlotHintsPath(), rendered, 'utf-8')
@@ -76,10 +70,6 @@ export function buildCacheKeys(prefix: string): {
 
   return {
     primaryKey: `${shaBase}-${runNumber}`,
-    restoreKeys: [
-      `${shaBase}-`,
-      `${base}-`,
-      `${sanitize(prefix)}-${runner}-${repo}-`
-    ]
+    restoreKeys: [`${shaBase}-`, `${base}-`, `${sanitize(prefix)}-${runner}-${repo}-`]
   }
 }

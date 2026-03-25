@@ -11,19 +11,12 @@ import * as core from '../__fixtures__/core.js'
 // Mocks should be declared before the module being tested is imported.
 jest.unstable_mockModule('@actions/core', () => core)
 const restoreCache =
-  jest.fn<
-    (
-      paths: string[],
-      primaryKey: string,
-      restoreKeys?: string[]
-    ) => Promise<string | undefined>
-  >()
+  jest.fn<(paths: string[], primaryKey: string, restoreKeys?: string[]) => Promise<string | undefined>>()
 jest.unstable_mockModule('@actions/cache', () => ({
   restoreCache
 }))
 
-const buildCacheKeys =
-  jest.fn<(prefix: string) => { primaryKey: string; restoreKeys: string[] }>()
+const buildCacheKeys = jest.fn<(prefix: string) => { primaryKey: string; restoreKeys: string[] }>()
 const ensureBoostCacheDir = jest.fn<() => Promise<void>>()
 const getSlotHintsPath = jest.fn<() => string>()
 const readSlotHintsFile = jest.fn<
@@ -43,8 +36,7 @@ jest.unstable_mockModule('../src/cache-utils.js', () => ({
 }))
 
 const normalizeBlockIdentifier = jest.fn<(block: string) => string>()
-const parseRpcEndpointsJson =
-  jest.fn<(value: string) => Record<string, string>>()
+const parseRpcEndpointsJson = jest.fn<(value: string) => Record<string, string>>()
 
 jest.unstable_mockModule('../src/input-utils.js', () => ({
   normalizeBlockIdentifier,
@@ -63,17 +55,10 @@ jest.unstable_mockModule('../src/storage-extractor.js', () => ({
   extractStorageValues
 }))
 
-const mkdir =
-  jest.fn<(path: string, options?: { recursive?: boolean }) => Promise<void>>()
-const stat =
-  jest.fn<
-    (
-      path: string
-    ) => Promise<{ isDirectory: () => boolean; isFile: () => boolean }>
-  >()
+const mkdir = jest.fn<(path: string, options?: { recursive?: boolean }) => Promise<void>>()
+const stat = jest.fn<(path: string) => Promise<{ isDirectory: () => boolean; isFile: () => boolean }>>()
 const readFile = jest.fn<(path: string, encoding: string) => Promise<string>>()
-const writeFile =
-  jest.fn<(path: string, data: string, encoding: string) => Promise<void>>()
+const writeFile = jest.fn<(path: string, data: string, encoding: string) => Promise<void>>()
 
 jest.unstable_mockModule('node:fs/promises', () => ({
   mkdir,
@@ -87,8 +72,11 @@ jest.unstable_mockModule('node:fs/promises', () => ({
 const { run } = await import('../src/main.js')
 
 describe('main.ts', () => {
+  const fetchMock = jest.fn<typeof fetch>()
+
   beforeEach(() => {
     process.env.HOME = '/home/tester'
+    global.fetch = fetchMock
 
     core.getInput.mockImplementation((name: string) => {
       if (name === 'block') return 'latest'
@@ -107,6 +95,18 @@ describe('main.ts', () => {
     parseRpcEndpointsJson.mockReturnValue({
       mainnet: 'https://rpc'
     })
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          result: {
+            number: '0x123'
+          }
+        })
+    } as Response)
     readSlotHintsFile.mockResolvedValue({
       chains: {
         mainnet: {
@@ -126,9 +126,7 @@ describe('main.ts', () => {
       }
     })
 
-    stat.mockRejectedValue(
-      Object.assign(new Error('missing'), { code: 'ENOENT' })
-    )
+    stat.mockRejectedValue(Object.assign(new Error('missing'), { code: 'ENOENT' }))
   })
 
   afterEach(() => {
@@ -147,22 +145,12 @@ describe('main.ts', () => {
     expect(core.getInput).toHaveBeenNthCalledWith(3, 'cache-key-prefix')
 
     expect(ensureBoostCacheDir).toHaveBeenCalledTimes(1)
-    expect(restoreCache).toHaveBeenNthCalledWith(
-      1,
-      ['/tmp/slot-hints.json'],
-      'boost-linux-repo-ref-1',
-      ['boost-linux-repo-ref-', 'boost-linux-repo-']
-    )
-    expect(core.saveState).toHaveBeenNthCalledWith(
-      1,
-      'FOUNDRY_CACHE_BOOST_PRIMARY_KEY',
-      'boost-linux-repo-ref-1'
-    )
-    expect(core.saveState).toHaveBeenNthCalledWith(
-      2,
-      'FOUNDRY_CACHE_BOOST_MATCHED_KEY',
-      'boost-linux-repo-ref-0'
-    )
+    expect(restoreCache).toHaveBeenNthCalledWith(1, ['/tmp/slot-hints.json'], 'boost-linux-repo-ref-1', [
+      'boost-linux-repo-ref-',
+      'boost-linux-repo-'
+    ])
+    expect(core.saveState).toHaveBeenNthCalledWith(1, 'FOUNDRY_CACHE_BOOST_PRIMARY_KEY', 'boost-linux-repo-ref-1')
+    expect(core.saveState).toHaveBeenNthCalledWith(2, 'FOUNDRY_CACHE_BOOST_MATCHED_KEY', 'boost-linux-repo-ref-0')
 
     expect(extractStorageValues).toHaveBeenNthCalledWith(
       1,
@@ -170,18 +158,14 @@ describe('main.ts', () => {
       {
         '0x1234567890abcdef1234567890abcdef12345678': ['0x1']
       },
-      'latest'
+      '0x123'
     )
 
-    expect(mkdir).toHaveBeenNthCalledWith(
-      1,
-      '/home/tester/.foundry/cache/rpc/mainnet',
-      { recursive: true }
-    )
+    expect(mkdir).toHaveBeenNthCalledWith(1, '/home/tester/.foundry/cache/rpc/mainnet', { recursive: true })
     expect(writeFile).toHaveBeenCalledTimes(1)
     expect(writeFile).toHaveBeenNthCalledWith(
       1,
-      '/home/tester/.foundry/cache/rpc/mainnet/latest',
+      '/home/tester/.foundry/cache/rpc/mainnet/0x123',
       expect.stringContaining('"storage"'),
       'utf-8'
     )
@@ -216,9 +200,7 @@ describe('main.ts', () => {
     await run()
 
     expect(extractStorageValues).not.toHaveBeenCalled()
-    expect(core.info).toHaveBeenCalledWith(
-      'Skipping chain mainnet: no slots requested'
-    )
+    expect(core.info).toHaveBeenCalledWith('Skipping chain mainnet: no slots requested')
   })
 
   it('Skips writing when target block path is a directory', async () => {
@@ -232,7 +214,7 @@ describe('main.ts', () => {
     expect(readFile).not.toHaveBeenCalled()
     expect(writeFile).not.toHaveBeenCalled()
     expect(core.info).toHaveBeenCalledWith(
-      'Skipping /home/tester/.foundry/cache/rpc/mainnet/latest: path is a directory'
+      'Skipping /home/tester/.foundry/cache/rpc/mainnet/0x123: path is a directory'
     )
   })
 
@@ -246,9 +228,7 @@ describe('main.ts', () => {
     await run()
 
     expect(writeFile).not.toHaveBeenCalled()
-    expect(core.info).toHaveBeenCalledWith(
-      'Skipping /home/tester/.foundry/cache/rpc/mainnet/latest: malformed JSON'
-    )
+    expect(core.info).toHaveBeenCalledWith('Skipping /home/tester/.foundry/cache/rpc/mainnet/0x123: malformed JSON')
   })
 
   it('Merges fetched storage with an existing valid block cache file', async () => {

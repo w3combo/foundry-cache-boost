@@ -1,8 +1,7 @@
 import * as core from '@actions/core'
 import { normalizeSlot } from './input-utils.js'
 
-const OVERRIDE_STORAGE_READER_CODE =
-  '0x5f5b80361460135780355481526020016001565b365ff3'
+const OVERRIDE_STORAGE_READER_CODE = '0x5f5b80361460135780355481526020016001565b365ff3'
 const MAX_BATCH_SIZE = 1000
 const MAX_RETRIES = 5
 const MULTICALL3_ADDRESS = '0xca11bde05977b3631167028862be2a173976ca11'
@@ -63,11 +62,7 @@ function encodeAggregate3Call(calls: AggregateCall[]): string {
 
   for (const call of calls) {
     const encodedCallData = encodeBytes(call.callData)
-    const element =
-      encodeAddress(call.target) +
-      encodeBool(call.allowFailure) +
-      encodeUint256(96n) +
-      encodedCallData
+    const element = encodeAddress(call.target) + encodeBool(call.allowFailure) + encodeUint256(96n) + encodedCallData
 
     offsets.push(encodeUint256(runningOffset))
     encodedElements.push(element)
@@ -86,9 +81,7 @@ function readWord(data: Buffer, offset: number): bigint {
   return BigInt(`0x${data.subarray(offset, offset + 32).toString('hex')}`)
 }
 
-function decodeAggregate3Result(
-  resultHex: string
-): Array<{ success: boolean; data: Buffer }> {
+function decodeAggregate3Result(resultHex: string): Array<{ success: boolean; data: Buffer }> {
   if (!resultHex.startsWith('0x')) {
     throw new Error('Invalid aggregate3 return')
   }
@@ -128,12 +121,7 @@ function decodeAggregate3Result(
   return out
 }
 
-async function jsonRpcCall(
-  rpcUrl: string,
-  method: string,
-  params: unknown[],
-  requestId: number
-): Promise<unknown> {
+async function jsonRpcCall(rpcUrl: string, method: string, params: unknown[], requestId: number): Promise<unknown> {
   const payload = {
     jsonrpc: '2.0',
     id: requestId,
@@ -172,9 +160,7 @@ async function jsonRpcCall(
   }
 
   if (parsedObj.error !== undefined) {
-    throw new Error(
-      `JSON-RPC error from ${method}: ${JSON.stringify(parsedObj.error)}`
-    )
+    throw new Error(`JSON-RPC error from ${method}: ${JSON.stringify(parsedObj.error)}`)
   }
 
   if (parsedObj.result === undefined) {
@@ -210,11 +196,7 @@ function buildJobs(storageInput: Record<string, unknown[]>): BatchJob[] {
       }
     }
 
-    for (
-      let index = 0;
-      index < normalizedSlots.length;
-      index += MAX_BATCH_SIZE
-    ) {
+    for (let index = 0; index < normalizedSlots.length; index += MAX_BATCH_SIZE) {
       const batchSlots = normalizedSlots.slice(index, index + MAX_BATCH_SIZE)
       jobs.push({ address, slots: batchSlots })
     }
@@ -235,10 +217,7 @@ export async function extractStorageValues(
 
   const jobs = buildJobs(storageInput)
   const requestedAddressCount = Object.keys(storageInput).length
-  const requestedSlotCount = jobs.reduce(
-    (count, job) => count + job.slots.length,
-    0
-  )
+  const requestedSlotCount = jobs.reduce((count, job) => count + job.slots.length, 0)
   core.debug(
     `Storage extractor request prepared: ${requestedAddressCount} address(es), ${requestedSlotCount} slot(s), ${jobs.length} batch job(s), block ${blockIdentifier}`
   )
@@ -274,13 +253,8 @@ export async function extractStorageValues(
     }
 
     const batchAddressCount = batchJobs.length
-    const batchSlotCount = batchJobs.reduce(
-      (count, job) => count + job.slots.length,
-      0
-    )
-    core.debug(
-      `Processing extraction batch: ${batchAddressCount} address(es), ${batchSlotCount} slot(s)`
-    )
+    const batchSlotCount = batchJobs.reduce((count, job) => count + job.slots.length, 0)
+    core.debug(`Processing extraction batch: ${batchAddressCount} address(es), ${batchSlotCount} slot(s)`)
 
     const calls: AggregateCall[] = []
     const stateOverrides: Record<string, { code: string }> = {}
@@ -318,32 +292,19 @@ export async function extractStorageValues(
     for (let attempt = 0; attempt < MAX_RETRIES; attempt += 1) {
       requestId += 1
       try {
-        rpcResult = await jsonRpcCall(
-          rpcUrl,
-          'eth_call',
-          payloadParams,
-          requestId
-        )
+        rpcResult = await jsonRpcCall(rpcUrl, 'eth_call', payloadParams, requestId)
         rpcSuccess = true
         break
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
         rpcFailureReason = message
-        core.debug(
-          `eth_call attempt ${attempt + 1}/${MAX_RETRIES} failed: ${message}`
-        )
+        core.debug(`eth_call attempt ${attempt + 1}/${MAX_RETRIES} failed: ${message}`)
         await sleep(150 * (attempt + 1))
       }
     }
 
-    if (
-      !rpcSuccess ||
-      typeof rpcResult !== 'string' ||
-      !rpcResult.startsWith('0x')
-    ) {
-      core.debug(
-        `Skipping batch after eth_call failure. Last reason: ${rpcFailureReason ?? 'missing/invalid result'}`
-      )
+    if (!rpcSuccess || typeof rpcResult !== 'string' || !rpcResult.startsWith('0x')) {
+      core.debug(`Skipping batch after eth_call failure. Last reason: ${rpcFailureReason ?? 'missing/invalid result'}`)
       continue
     }
 
@@ -368,9 +329,7 @@ export async function extractStorageValues(
       const { address, slots } = batchJobs[index]
       const expectedLength = slots.length * 32
       if (data.length < expectedLength) {
-        core.debug(
-          `aggregate3 call ${index} returned ${data.length} bytes, expected at least ${expectedLength}`
-        )
+        core.debug(`aggregate3 call ${index} returned ${data.length} bytes, expected at least ${expectedLength}`)
         continue
       }
 
@@ -382,9 +341,7 @@ export async function extractStorageValues(
         }
 
         const word = data.subarray(start, end)
-        output[address][slots[slotIndex]] = normalizeHexValue(
-          `0x${word.toString('hex')}`
-        )
+        output[address][slots[slotIndex]] = normalizeHexValue(`0x${word.toString('hex')}`)
         extractedInBatch += 1
       }
     }
@@ -394,13 +351,8 @@ export async function extractStorageValues(
     )
   }
 
-  const totalExtracted = Object.values(output).reduce(
-    (count, slotMap) => count + Object.keys(slotMap).length,
-    0
-  )
-  core.debug(
-    `Storage extractor completed: extracted ${totalExtracted}/${requestedSlotCount} requested slot(s)`
-  )
+  const totalExtracted = Object.values(output).reduce((count, slotMap) => count + Object.keys(slotMap).length, 0)
+  core.debug(`Storage extractor completed: extracted ${totalExtracted}/${requestedSlotCount} requested slot(s)`)
 
   return output
 }

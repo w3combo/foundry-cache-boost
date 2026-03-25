@@ -1,4 +1,4 @@
-import { d as debug, n as normalizeSlot, g as getInput, a as normalizeBlockIdentifier, p as parseRpcEndpointsJson, e as ensureBoostCacheDir, b as getSlotHintsPath, c as buildCacheKeys, f as cacheExports, s as saveState, C as CACHE_PRIMARY_KEY_STATE, h as CACHE_MATCHED_KEY_STATE, i as info, r as readSlotHintsFile, j as setFailed } from './input-utils-CwJwCTPx.js';
+import { d as debug, n as normalizeSlot, g as getInput, a as normalizeBlockIdentifier, p as parseRpcEndpointsJson, e as ensureBoostCacheDir, b as getSlotHintsPath, c as buildCacheKeys, f as cacheExports, s as saveState, C as CACHE_PRIMARY_KEY_STATE, h as CACHE_MATCHED_KEY_STATE, i as info, r as readSlotHintsFile, j as setFailed } from './input-utils-CpIwri7H.js';
 import { mkdir, stat, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import 'os';
@@ -85,10 +85,7 @@ function encodeAggregate3Call(calls) {
     let runningOffset = BigInt(n * 32);
     for (const call of calls) {
         const encodedCallData = encodeBytes(call.callData);
-        const element = encodeAddress(call.target) +
-            encodeBool(call.allowFailure) +
-            encodeUint256(96n) +
-            encodedCallData;
+        const element = encodeAddress(call.target) + encodeBool(call.allowFailure) + encodeUint256(96n) + encodedCallData;
         offsets.push(encodeUint256(runningOffset));
         encodedElements.push(element);
         runningOffset += BigInt(element.length / 2);
@@ -134,7 +131,7 @@ function decodeAggregate3Result(resultHex) {
     }
     return out;
 }
-async function jsonRpcCall(rpcUrl, method, params, requestId) {
+async function jsonRpcCall$1(rpcUrl, method, params, requestId) {
     const payload = {
         jsonrpc: '2.0',
         id: requestId,
@@ -265,7 +262,7 @@ async function extractStorageValues(rpcUrl, storageInput, blockIdentifier) {
         for (let attempt = 0; attempt < MAX_RETRIES; attempt += 1) {
             requestId += 1;
             try {
-                rpcResult = await jsonRpcCall(rpcUrl, 'eth_call', payloadParams, requestId);
+                rpcResult = await jsonRpcCall$1(rpcUrl, 'eth_call', payloadParams, requestId);
                 rpcSuccess = true;
                 break;
             }
@@ -276,9 +273,7 @@ async function extractStorageValues(rpcUrl, storageInput, blockIdentifier) {
                 await sleep(150 * (attempt + 1));
             }
         }
-        if (!rpcSuccess ||
-            typeof rpcResult !== 'string' ||
-            !rpcResult.startsWith('0x')) {
+        if (!rpcSuccess || typeof rpcResult !== 'string' || !rpcResult.startsWith('0x')) {
             debug(`Skipping batch after eth_call failure. Last reason: ${rpcFailureReason ?? 'missing/invalid result'}`);
             continue;
         }
@@ -329,9 +324,7 @@ function parseStorageField(storage) {
     }
     const parsed = {};
     for (const [address, slotsValue] of Object.entries(storage)) {
-        if (!slotsValue ||
-            typeof slotsValue !== 'object' ||
-            Array.isArray(slotsValue)) {
+        if (!slotsValue || typeof slotsValue !== 'object' || Array.isArray(slotsValue)) {
             continue;
         }
         parsed[address] = {};
@@ -357,6 +350,57 @@ function mergeStorageValues(existing, fetched) {
         }
     }
     return merged;
+}
+async function jsonRpcCall(rpcUrl, method, params) {
+    const response = await fetch(rpcUrl, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            method,
+            params
+        }),
+        signal: AbortSignal.timeout(30_000)
+    });
+    const body = await response.text();
+    if (!response.ok) {
+        throw new Error(`HTTP error ${response.status} from RPC endpoint: ${body}`);
+    }
+    let parsed;
+    try {
+        parsed = JSON.parse(body);
+    }
+    catch {
+        throw new Error(`Invalid JSON-RPC response: ${body}`);
+    }
+    if (!parsed || typeof parsed !== 'object') {
+        throw new Error('Invalid JSON-RPC response object');
+    }
+    const parsedObj = parsed;
+    if (parsedObj.error !== undefined) {
+        throw new Error(`JSON-RPC error from ${method}: ${JSON.stringify(parsedObj.error)}`);
+    }
+    if (parsedObj.result === undefined) {
+        throw new Error('JSON-RPC response missing result field');
+    }
+    return parsedObj.result;
+}
+async function resolveConcreteBlock(rpcUrl, blockIdentifier) {
+    if (/^0x[0-9a-f]+$/i.test(blockIdentifier) || /^\d+$/.test(blockIdentifier)) {
+        return blockIdentifier;
+    }
+    const blockResult = await jsonRpcCall(rpcUrl, 'eth_getBlockByNumber', [blockIdentifier, false]);
+    if (!blockResult || typeof blockResult !== 'object') {
+        throw new Error(`Unable to resolve block tag ${blockIdentifier}: RPC returned invalid block payload`);
+    }
+    const blockObject = blockResult;
+    if (typeof blockObject.number !== 'string') {
+        throw new Error(`Unable to resolve block tag ${blockIdentifier}: missing block number`);
+    }
+    return `0x${BigInt(blockObject.number).toString(16)}`;
 }
 async function writeStorageValues(chain, block, values) {
     const outputDir = join(process.env.HOME ?? process.env.USERPROFILE ?? '.', '.foundry', 'cache', 'rpc', chain);
@@ -389,9 +433,7 @@ async function writeStorageValues(chain, block, values) {
             info(`Skipping ${outputPath}: malformed JSON`);
             return;
         }
-        if (!existingParsed ||
-            typeof existingParsed !== 'object' ||
-            Array.isArray(existingParsed)) {
+        if (!existingParsed || typeof existingParsed !== 'object' || Array.isArray(existingParsed)) {
             info(`Skipping ${outputPath}: expected JSON object at root`);
             return;
         }
@@ -446,8 +488,9 @@ async function run() {
                 info(`Skipping chain ${chain}: no slots requested`);
                 continue;
             }
-            const values = await extractStorageValues(rpcUrl, requested, block);
-            await writeStorageValues(chain, block, values);
+            const concreteBlock = await resolveConcreteBlock(rpcUrl, block);
+            const values = await extractStorageValues(rpcUrl, requested, concreteBlock);
+            await writeStorageValues(chain, concreteBlock, values);
             const addressCount = Object.keys(values).length;
             const slotCount = Object.values(values).reduce((count, slotMap) => count + Object.keys(slotMap).length, 0);
             info(`Retrieved ${slotCount} slot values across ${addressCount} address(es) for chain ${chain}`);

@@ -17,11 +17,9 @@ const SLOTS = [
 
 describe('storage-extractor.ts', () => {
   it('Skips malformed slots without making RPC calls', async () => {
-    const fetchSpy = jest
-      .spyOn(globalThis, 'fetch')
-      .mockImplementation(async () => {
-        throw new Error('fetch should not be called for malformed slot input')
-      })
+    const fetchSpy = jest.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      throw new Error('fetch should not be called for malformed slot input')
+    })
 
     const values = await extractStorageValues(
       RPC_URL,

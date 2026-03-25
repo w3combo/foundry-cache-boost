@@ -2,10 +2,9 @@
 
 [![Continuous Integration](https://github.com/w3combo/foundry-cache-boost/actions/workflows/ci.yml/badge.svg)](https://github.com/w3combo/foundry-cache-boost/actions/workflows/ci.yml)
 
-Foundry Cache Boost is a GitHub Action that targets faster forge test runs on
-forked networks (mainnet or any live network) by storing used storage slots keys
-from previous runs and getting back all the slots values in batch before next
-runs.
+Foundry Cache Boost is a GitHub Action that targets faster forge test runs on forked networks (mainnet or any live
+network) by storing used storage slots keys from previous runs and getting back all the slots values in batch before
+next runs.
 
 ## Input
 
@@ -20,16 +19,15 @@ The action currently exposes these inputs.
   - Required: no
   - Default: foundry-cache-boost
 
-Slot hints are managed internally by the action in the Foundry cache directory
-and persisted through GitHub Actions cache between runs.
+Slot hints are managed internally by the action in the Foundry cache directory and persisted through GitHub Actions
+cache between runs.
 
-When slot hints are available, the action fetches slot values ahead of test runs
-and merges them into Foundry's RPC cache block files at:
+When slot hints are available, the action fetches slot values ahead of test runs and merges them into Foundry's RPC
+cache block files at:
 
 - `$HOME/.foundry/cache/rpc/<chain>/<block>`
 
-If a block path already exists and is not a valid JSON file, it is left
-untouched.
+If a block path already exists and is not a valid JSON file, it is left untouched.
 
 ## Usage
 
