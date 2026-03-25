@@ -7,11 +7,71 @@
  */
 import { jest } from '@jest/globals'
 import * as core from '../__fixtures__/core.js'
-import { wait } from '../__fixtures__/wait.js'
 
 // Mocks should be declared before the module being tested is imported.
 jest.unstable_mockModule('@actions/core', () => core)
-jest.unstable_mockModule('../src/wait.js', () => ({ wait }))
+const restoreCache =
+  jest.fn<
+    (
+      paths: string[],
+      primaryKey: string,
+      restoreKeys?: string[]
+    ) => Promise<string | undefined>
+  >()
+jest.unstable_mockModule('@actions/cache', () => ({
+  restoreCache
+}))
+
+const buildCacheKeys =
+  jest.fn<(prefix: string) => { primaryKey: string; restoreKeys: string[] }>()
+const ensureBoostCacheDir = jest.fn<() => Promise<void>>()
+const getSlotHintsPath = jest.fn<() => string>()
+const readSlotHintsFile = jest.fn<
+  () => Promise<{
+    chains: Record<string, Record<string, string[]>>
+    meta: { generatedAt: string; block: string; window: number }
+  } | null>
+>()
+
+jest.unstable_mockModule('../src/cache-utils.js', () => ({
+  CACHE_MATCHED_KEY_STATE: 'FOUNDRY_CACHE_BOOST_MATCHED_KEY',
+  CACHE_PRIMARY_KEY_STATE: 'FOUNDRY_CACHE_BOOST_PRIMARY_KEY',
+  buildCacheKeys,
+  ensureBoostCacheDir,
+  getSlotHintsPath,
+  readSlotHintsFile
+}))
+
+const getChainStorageRequest =
+  jest.fn<(parsed: unknown, chain: string) => Record<string, unknown[]>>()
+const normalizeBlockIdentifier = jest.fn<(block: string) => string>()
+const parseRpcEndpointsJson =
+  jest.fn<(value: string) => Record<string, string>>()
+const readStorageInputFile = jest.fn<
+  (path: string) => Promise<{
+    global?: Record<string, string[]>
+    chains: Record<string, Record<string, string[]>>
+  }>
+>()
+
+jest.unstable_mockModule('../src/input-utils.js', () => ({
+  getChainStorageRequest,
+  normalizeBlockIdentifier,
+  parseRpcEndpointsJson,
+  readStorageInputFile
+}))
+
+const extractStorageValues =
+  jest.fn<
+    (
+      rpcUrl: string,
+      storageInput: Record<string, unknown[]>,
+      blockIdentifier: string
+    ) => Promise<Record<string, Record<string, string>>>
+  >()
+jest.unstable_mockModule('../src/storage-extractor.js', () => ({
+  extractStorageValues
+}))
 
 // The module being tested should be imported dynamically. This ensures that the
 // mocks are used in place of any actual dependencies.
@@ -19,44 +79,106 @@ const { run } = await import('../src/main.js')
 
 describe('main.ts', () => {
   beforeEach(() => {
-    // Set the action's inputs as return values from core.getInput().
-    core.getInput.mockImplementation(() => '500')
+    core.getInput.mockImplementation((name: string) => {
+      if (name === 'block') return 'latest'
+      if (name === 'storage-input-path') return './slots.json'
+      if (name === 'rpc-endpoints-json') return '{"mainnet":"https://rpc"}'
+      if (name === 'cache-key-prefix') return 'boost'
+      return ''
+    })
 
-    // Mock the wait function so that it does not actually wait.
-    wait.mockImplementation(() => Promise.resolve('done!'))
+    buildCacheKeys.mockReturnValue({
+      primaryKey: 'boost-linux-repo-ref-1',
+      restoreKeys: ['boost-linux-repo-ref-', 'boost-linux-repo-']
+    })
+    getSlotHintsPath.mockReturnValue('/tmp/slot-hints.json')
+    restoreCache.mockResolvedValue('boost-linux-repo-ref-0')
+    normalizeBlockIdentifier.mockReturnValue('latest')
+    parseRpcEndpointsJson.mockReturnValue({
+      mainnet: 'https://rpc'
+    })
+    readStorageInputFile.mockResolvedValue({
+      global: {
+        '0x1234567890abcdef1234567890abcdef12345678': ['0x0']
+      },
+      chains: {}
+    })
+    getChainStorageRequest.mockReturnValue({
+      '0x1234567890abcdef1234567890abcdef12345678': ['0x0']
+    })
+    readSlotHintsFile.mockResolvedValue({
+      chains: {
+        mainnet: {
+          '0x1234567890abcdef1234567890abcdef12345678': ['0x1']
+        }
+      },
+      meta: {
+        generatedAt: '2026-03-25T00:00:00.000Z',
+        block: 'latest',
+        window: 128
+      }
+    })
+    extractStorageValues.mockResolvedValue({
+      '0x1234567890abcdef1234567890abcdef12345678': {
+        '0x0': '0x1',
+        '0x1': '0x2'
+      }
+    })
   })
 
   afterEach(() => {
     jest.resetAllMocks()
   })
 
-  it('Sets the time output', async () => {
+  it('Restores cache and runs extraction for configured chains', async () => {
     await run()
 
-    // Verify the time output was set.
-    expect(core.setOutput).toHaveBeenNthCalledWith(
+    expect(core.getInput).toHaveBeenNthCalledWith(1, 'block', {
+      required: true
+    })
+    expect(core.getInput).toHaveBeenNthCalledWith(2, 'storage-input-path', {
+      required: true
+    })
+    expect(core.getInput).toHaveBeenNthCalledWith(3, 'rpc-endpoints-json', {
+      required: true
+    })
+    expect(core.getInput).toHaveBeenNthCalledWith(4, 'cache-key-prefix')
+
+    expect(ensureBoostCacheDir).toHaveBeenCalledTimes(1)
+    expect(restoreCache).toHaveBeenNthCalledWith(
       1,
-      'time',
-      // Simple regex to match a time string in the format HH:MM:SS.
-      expect.stringMatching(/^\d{2}:\d{2}:\d{2}/)
+      ['/tmp/slot-hints.json'],
+      'boost-linux-repo-ref-1',
+      ['boost-linux-repo-ref-', 'boost-linux-repo-']
+    )
+    expect(core.saveState).toHaveBeenNthCalledWith(
+      1,
+      'FOUNDRY_CACHE_BOOST_PRIMARY_KEY',
+      'boost-linux-repo-ref-1'
+    )
+    expect(core.saveState).toHaveBeenNthCalledWith(
+      2,
+      'FOUNDRY_CACHE_BOOST_MATCHED_KEY',
+      'boost-linux-repo-ref-0'
+    )
+
+    expect(extractStorageValues).toHaveBeenNthCalledWith(
+      1,
+      'https://rpc',
+      {
+        '0x1234567890abcdef1234567890abcdef12345678': ['0x0', '0x1']
+      },
+      'latest'
     )
   })
 
   it('Sets a failed status', async () => {
-    // Clear the getInput mock and return an invalid value.
-    core.getInput.mockClear().mockReturnValueOnce('this is not a number')
-
-    // Clear the wait mock and return a rejected promise.
-    wait
-      .mockClear()
-      .mockRejectedValueOnce(new Error('milliseconds is not a number'))
+    normalizeBlockIdentifier.mockImplementationOnce(() => {
+      throw new Error('bad block')
+    })
 
     await run()
 
-    // Verify that the action was marked as failed.
-    expect(core.setFailed).toHaveBeenNthCalledWith(
-      1,
-      'milliseconds is not a number'
-    )
+    expect(core.setFailed).toHaveBeenNthCalledWith(1, 'bad block')
   })
 })

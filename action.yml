@@ -1,24 +1,32 @@
-name: The name of your action here
-description: Provide a description here
-author: Your name or organization here
+name: Foundry Cache Boost
+description:
+  Speed up forge test on forked networks by reusing Foundry RPC cache data
+author: w3combo
 
 # Add your action's branding here. This will appear on the GitHub Marketplace.
 branding:
-  icon: heart
-  color: red
+  icon: zap
+  color: blue
 
 # Define your inputs here.
 inputs:
-  milliseconds:
-    description: Your input description here
+  block:
+    description: Block number or tag used to scope cache behavior
     required: true
-    default: '1000'
-
-# Define your outputs here.
-outputs:
-  time:
-    description: Your output description here
+    default: latest
+  storage-input-path:
+    description: Path to a JSON file describing address to storage slots mapping
+    required: true
+  rpc-endpoints-json:
+    description: JSON object mapping chain names to RPC URLs
+    required: true
+  cache-key-prefix:
+    description: Prefix used for GitHub cache restore/save keys
+    required: false
+    default: foundry-cache-boost
 
 runs:
   using: node24
   main: dist/index.js
+  post: dist/post.js
+  post-if: success()
