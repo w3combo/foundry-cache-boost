@@ -42,20 +42,7 @@ export default [
 
       parser: tsParser,
       ecmaVersion: 2023,
-      sourceType: 'module',
-
-      parserOptions: {
-        projectService: {
-          allowDefaultProject: [
-            '__fixtures__/*.ts',
-            '__tests__/*.ts',
-            'eslint.config.mjs',
-            'jest.config.js',
-            'rollup.config.ts'
-          ]
-        },
-        tsconfigRootDir: import.meta.dirname
-      }
+      sourceType: 'module'
     },
 
     settings: {
