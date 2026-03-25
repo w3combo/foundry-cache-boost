@@ -35,12 +35,27 @@ jest.unstable_mockModule('../src/cache-utils.js', () => ({
   readSlotHintsFile
 }))
 
-const normalizeBlockIdentifier = jest.fn<(block: string) => string>()
+const parseBlockConfig = jest.fn<
+  (block: string) => {
+    defaultBlock?: string
+    blocksByChain: Record<string, string>
+  }
+>()
+const resolveBlockForChain = jest.fn<
+  (
+    blockConfig: {
+      defaultBlock?: string
+      blocksByChain: Record<string, string>
+    },
+    chain: string
+  ) => string
+>()
 const parseRpcEndpointsJson = jest.fn<(value: string) => Record<string, string>>()
 
 jest.unstable_mockModule('../src/input-utils.js', () => ({
-  normalizeBlockIdentifier,
-  parseRpcEndpointsJson
+  parseBlockConfig,
+  parseRpcEndpointsJson,
+  resolveBlockForChain
 }))
 
 const extractStorageValues =
@@ -91,7 +106,8 @@ describe('main.ts', () => {
     })
     getSlotHintsPath.mockReturnValue('/tmp/slot-hints.json')
     restoreCache.mockResolvedValue('boost-linux-repo-ref-0')
-    normalizeBlockIdentifier.mockReturnValue('latest')
+    parseBlockConfig.mockReturnValue({ defaultBlock: 'latest', blocksByChain: {} })
+    resolveBlockForChain.mockReturnValue('latest')
     parseRpcEndpointsJson.mockReturnValue({
       mainnet: 'https://rpc'
     })
@@ -151,6 +167,7 @@ describe('main.ts', () => {
     ])
     expect(core.saveState).toHaveBeenNthCalledWith(1, 'FOUNDRY_CACHE_BOOST_PRIMARY_KEY', 'boost-linux-repo-ref-1')
     expect(core.saveState).toHaveBeenNthCalledWith(2, 'FOUNDRY_CACHE_BOOST_MATCHED_KEY', 'boost-linux-repo-ref-0')
+    expect(core.setOutput).toHaveBeenNthCalledWith(1, 'resolved-block-numbers-json', '{"mainnet":"291"}')
 
     expect(extractStorageValues).toHaveBeenNthCalledWith(
       1,
@@ -172,7 +189,7 @@ describe('main.ts', () => {
   })
 
   it('Sets a failed status', async () => {
-    normalizeBlockIdentifier.mockImplementationOnce(() => {
+    parseBlockConfig.mockImplementationOnce(() => {
       throw new Error('bad block')
     })
 
@@ -201,6 +218,29 @@ describe('main.ts', () => {
 
     expect(extractStorageValues).not.toHaveBeenCalled()
     expect(core.info).toHaveBeenCalledWith('Skipping chain mainnet: no slots requested')
+    expect(core.setOutput).toHaveBeenNthCalledWith(1, 'resolved-block-numbers-json', '{"mainnet":"291"}')
+  })
+
+  it('Uses per-chain block configuration when resolving concrete blocks', async () => {
+    parseBlockConfig.mockReturnValueOnce({
+      blocksByChain: {
+        mainnet: 'finalized'
+      }
+    })
+    resolveBlockForChain.mockReturnValueOnce('finalized')
+
+    await run()
+
+    expect(resolveBlockForChain).toHaveBeenNthCalledWith(
+      1,
+      {
+        blocksByChain: {
+          mainnet: 'finalized'
+        }
+      },
+      'mainnet'
+    )
+    expect(core.setOutput).toHaveBeenNthCalledWith(1, 'resolved-block-numbers-json', '{"mainnet":"291"}')
   })
 
   it('Skips writing when target block path is a directory', async () => {

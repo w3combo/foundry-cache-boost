@@ -24,13 +24,28 @@ jest.unstable_mockModule('../src/cache-utils.js', () => ({
 }))
 
 const isBlockWithinWindow = jest.fn<(fileBlock: bigint, targetBlock: bigint, windowSize: bigint) => boolean>()
-const normalizeBlockIdentifier = jest.fn<(raw: string) => string>()
+const parseBlockConfig = jest.fn<
+  (raw: string) => {
+    defaultBlock?: string
+    blocksByChain: Record<string, string>
+  }
+>()
 const parseNumericBlock = jest.fn<(block: string) => bigint | undefined>()
+const resolveBlockForChain = jest.fn<
+  (
+    blockConfig: {
+      defaultBlock?: string
+      blocksByChain: Record<string, string>
+    },
+    chain: string
+  ) => string
+>()
 
 jest.unstable_mockModule('../src/input-utils.js', () => ({
   isBlockWithinWindow,
-  normalizeBlockIdentifier,
-  parseNumericBlock
+  parseBlockConfig,
+  parseNumericBlock,
+  resolveBlockForChain
 }))
 
 jest.unstable_mockModule('@actions/core', () => core)
@@ -81,7 +96,8 @@ describe('post.ts', () => {
       return ''
     })
 
-    normalizeBlockIdentifier.mockReturnValue('0xbe')
+    parseBlockConfig.mockReturnValue({ defaultBlock: '0xbe', blocksByChain: {} })
+    resolveBlockForChain.mockReturnValue('0xbe')
     parseNumericBlock.mockReturnValue(190n)
     getCacheWindow.mockReturnValue(128n)
     getSlotHintsPath.mockReturnValue('/tmp/slot-hints.json')
@@ -168,5 +184,28 @@ describe('post.ts', () => {
     await runPost()
 
     expect(core.setFailed).toHaveBeenNthCalledWith(1, 'cannot write')
+  })
+
+  it('Writes per-chain block metadata when configured with chain mapping', async () => {
+    parseBlockConfig.mockReturnValueOnce({
+      blocksByChain: {
+        mainnet: '0xbe'
+      }
+    })
+    resolveBlockForChain.mockReturnValueOnce('0xbe')
+
+    await runPost()
+
+    expect(writeSlotHintsFile).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        meta: expect.objectContaining({
+          blocksByChain: {
+            mainnet: '0xbe'
+          },
+          window: 128
+        })
+      })
+    )
   })
 })

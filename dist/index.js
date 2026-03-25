@@ -1,4 +1,4 @@
-import { d as debug, n as normalizeSlot, g as getInput, a as normalizeBlockIdentifier, p as parseRpcEndpointsJson, e as ensureBoostCacheDir, b as getSlotHintsPath, c as buildCacheKeys, f as cacheExports, s as saveState, C as CACHE_PRIMARY_KEY_STATE, h as CACHE_MATCHED_KEY_STATE, i as info, r as readSlotHintsFile, j as setFailed } from './input-utils-CpIwri7H.js';
+import { d as debug, n as normalizeSlot, g as getInput, p as parseBlockConfig, a as parseRpcEndpointsJson, e as ensureBoostCacheDir, b as getSlotHintsPath, c as buildCacheKeys, f as cacheExports, s as saveState, C as CACHE_PRIMARY_KEY_STATE, h as CACHE_MATCHED_KEY_STATE, i as info, r as readSlotHintsFile, j as resolveBlockForChain, k as setOutput, l as setFailed } from './input-utils-BRIbjqDX.js';
 import { mkdir, stat, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import 'os';
@@ -463,8 +463,9 @@ async function run() {
             required: true
         });
         const cacheKeyPrefix = getInput('cache-key-prefix') || 'foundry-cache-boost';
-        const block = normalizeBlockIdentifier(rawBlock);
+        const blockConfig = parseBlockConfig(rawBlock);
         const rpcEndpoints = parseRpcEndpointsJson(rpcEndpointsJson);
+        const resolvedBlockNumbersByChain = {};
         await ensureBoostCacheDir();
         const cachePath = getSlotHintsPath();
         const cacheKeys = buildCacheKeys(cacheKeyPrefix);
@@ -479,23 +480,26 @@ async function run() {
         }
         const slotHints = await readSlotHintsFile();
         for (const [chain, rpcUrl] of Object.entries(rpcEndpoints)) {
+            const chainBlockIdentifier = resolveBlockForChain(blockConfig, chain);
             const hintsForChain = slotHints?.chains[chain];
             const requested = hintsForChain ?? {};
             const requestedAddressCount = Object.keys(requested).length;
             const requestedSlotCount = Object.values(requested).reduce((count, slots) => count + slots.length, 0);
             debug(`Chain ${chain} requested from cache hints: ${requestedAddressCount} address(es), ${requestedSlotCount} slot(s)`);
+            const concreteBlock = await resolveConcreteBlock(rpcUrl, chainBlockIdentifier);
+            resolvedBlockNumbersByChain[chain] = BigInt(concreteBlock).toString(10);
             if (Object.keys(requested).length === 0) {
                 info(`Skipping chain ${chain}: no slots requested`);
                 continue;
             }
-            const concreteBlock = await resolveConcreteBlock(rpcUrl, block);
             const values = await extractStorageValues(rpcUrl, requested, concreteBlock);
             await writeStorageValues(chain, concreteBlock, values);
             const addressCount = Object.keys(values).length;
             const slotCount = Object.values(values).reduce((count, slotMap) => count + Object.keys(slotMap).length, 0);
             info(`Retrieved ${slotCount} slot values across ${addressCount} address(es) for chain ${chain}`);
         }
-        info(`Completed storage retrieval for block ${block}`);
+        setOutput('resolved-block-numbers-json', JSON.stringify(resolvedBlockNumbersByChain));
+        info('Completed storage retrieval');
     }
     catch (error) {
         // Fail the workflow run if an error occurs

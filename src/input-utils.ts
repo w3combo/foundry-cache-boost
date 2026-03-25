@@ -1,6 +1,11 @@
 const ADDRESS_PATTERN = /^0x[0-9a-fA-F]{40}$/
 const BLOCK_TAGS = new Set(['latest', 'earliest', 'pending', 'safe', 'finalized'])
 
+export interface BlockConfig {
+  defaultBlock?: string
+  blocksByChain: Record<string, string>
+}
+
 function isAddress(value: string): boolean {
   return ADDRESS_PATTERN.test(value)
 }
@@ -122,6 +127,73 @@ export function normalizeBlockIdentifier(rawBlock: string): string {
   }
 
   throw new Error('Invalid block input. Use latest/pending/safe/finalized/earliest, hex, or decimal')
+}
+
+function normalizeUnknownBlockIdentifier(rawBlock: unknown): string {
+  if (typeof rawBlock === 'number') {
+    if (!Number.isInteger(rawBlock) || rawBlock < 0) {
+      throw new Error(`Invalid numeric block input: ${rawBlock}`)
+    }
+
+    return `0x${rawBlock.toString(16)}`
+  }
+
+  if (typeof rawBlock === 'string') {
+    return normalizeBlockIdentifier(rawBlock)
+  }
+
+  throw new Error(`Invalid block input type: ${typeof rawBlock}`)
+}
+
+export function parseBlockConfig(rawInput: string): BlockConfig {
+  const trimmed = rawInput.trim()
+  if (trimmed.length === 0) {
+    throw new Error('block input cannot be empty')
+  }
+
+  if (!trimmed.startsWith('{')) {
+    return {
+      defaultBlock: normalizeBlockIdentifier(trimmed),
+      blocksByChain: {}
+    }
+  }
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(trimmed)
+  } catch {
+    throw new Error('Invalid block input. Use a block identifier or a JSON object mapping chains to block identifiers')
+  }
+
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('Invalid block input. Expected a JSON object mapping chains to block identifiers')
+  }
+
+  const blocksByChain: Record<string, string> = {}
+  for (const [chain, blockValue] of Object.entries(parsed)) {
+    blocksByChain[chain] = normalizeUnknownBlockIdentifier(blockValue)
+  }
+
+  if (Object.keys(blocksByChain).length === 0) {
+    throw new Error('Invalid block input. Per-chain block mapping cannot be empty')
+  }
+
+  return {
+    blocksByChain
+  }
+}
+
+export function resolveBlockForChain(blockConfig: BlockConfig, chain: string): string {
+  const blockForChain = blockConfig.blocksByChain[chain]
+  if (blockForChain !== undefined) {
+    return blockForChain
+  }
+
+  if (blockConfig.defaultBlock !== undefined) {
+    return blockConfig.defaultBlock
+  }
+
+  throw new Error(`Missing block configuration for chain ${chain}`)
 }
 
 export function parseNumericBlock(blockIdentifier: string): bigint | undefined {

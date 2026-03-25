@@ -13,11 +13,18 @@ The action currently exposes these inputs.
 - block: Block number or tag used to scope cache behavior.
   - Required: yes
   - Default: latest
+  - Accepted formats:
+    - Single identifier (applies to every configured chain), for example `latest` or `21547000`
+    - JSON object mapping each chain to a block identifier, for example `{"mainnet":"finalized","polygon":69912345}`
 - rpc-endpoints-json: JSON object mapping chain names to RPC URLs.
   - Required: yes
 - cache-key-prefix: Prefix used for cache keys.
   - Required: no
   - Default: foundry-cache-boost
+
+## Outputs
+
+- resolved-block-numbers-json: JSON object mapping every configured chain to the resolved block number in decimal.
 
 Slot hints are managed internally by the action in the Foundry cache directory and persisted through GitHub Actions
 cache between runs.
@@ -47,10 +54,14 @@ jobs:
         uses: foundry-rs/foundry-toolchain@v1
 
       - name: Restore and inspect Foundry cache
+        id: cache-boost
         uses: w3combo/foundry-cache-boost@v1
         with:
-          block: latest
+          block: '{"mainnet":"safe","polygon":"latest"}'
           rpc-endpoints-json: '{"mainnet":"http://localhost:4000/main/evm/1","polygon":"http://localhost:4000/main/evm/137"}'
+
+      - name: Print resolved block numbers
+        run: echo "${{ steps.cache-boost.outputs.resolved-block-numbers-json }}"
 
       - name: Run tests
         run: forge test

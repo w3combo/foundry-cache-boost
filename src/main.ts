@@ -10,7 +10,7 @@ import {
   getSlotHintsPath,
   readSlotHintsFile
 } from './cache-utils.js'
-import { normalizeBlockIdentifier, parseRpcEndpointsJson } from './input-utils.js'
+import { parseBlockConfig, parseRpcEndpointsJson, resolveBlockForChain } from './input-utils.js'
 import { extractStorageValues } from './storage-extractor.js'
 
 type SlotValuesByAddress = Record<string, Record<string, string>>
@@ -192,8 +192,9 @@ export async function run(): Promise<void> {
     })
     const cacheKeyPrefix: string = core.getInput('cache-key-prefix') || 'foundry-cache-boost'
 
-    const block = normalizeBlockIdentifier(rawBlock)
+    const blockConfig = parseBlockConfig(rawBlock)
     const rpcEndpoints = parseRpcEndpointsJson(rpcEndpointsJson)
+    const resolvedBlockNumbersByChain: Record<string, string> = {}
 
     await ensureBoostCacheDir()
 
@@ -213,6 +214,7 @@ export async function run(): Promise<void> {
     const slotHints = await readSlotHintsFile()
 
     for (const [chain, rpcUrl] of Object.entries(rpcEndpoints)) {
+      const chainBlockIdentifier = resolveBlockForChain(blockConfig, chain)
       const hintsForChain = slotHints?.chains[chain]
       const requested = hintsForChain ?? {}
       const requestedAddressCount = Object.keys(requested).length
@@ -222,12 +224,13 @@ export async function run(): Promise<void> {
         `Chain ${chain} requested from cache hints: ${requestedAddressCount} address(es), ${requestedSlotCount} slot(s)`
       )
 
+      const concreteBlock = await resolveConcreteBlock(rpcUrl, chainBlockIdentifier)
+      resolvedBlockNumbersByChain[chain] = BigInt(concreteBlock).toString(10)
+
       if (Object.keys(requested).length === 0) {
         core.info(`Skipping chain ${chain}: no slots requested`)
         continue
       }
-
-      const concreteBlock = await resolveConcreteBlock(rpcUrl, block)
 
       const values = await extractStorageValues(rpcUrl, requested, concreteBlock)
       await writeStorageValues(chain, concreteBlock, values)
@@ -238,7 +241,8 @@ export async function run(): Promise<void> {
       core.info(`Retrieved ${slotCount} slot values across ${addressCount} address(es) for chain ${chain}`)
     }
 
-    core.info(`Completed storage retrieval for block ${block}`)
+    core.setOutput('resolved-block-numbers-json', JSON.stringify(resolvedBlockNumbersByChain))
+    core.info('Completed storage retrieval')
   } catch (error) {
     // Fail the workflow run if an error occurs
     if (error instanceof Error) core.setFailed(error.message)

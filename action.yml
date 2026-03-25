@@ -10,7 +10,7 @@ branding:
 # Define your inputs here.
 inputs:
   block:
-    description: Block number or tag used to scope cache behavior
+    description: Block number or tag, or a JSON object mapping chain names to block numbers/tags
     required: true
     default: latest
   rpc-endpoints-json:
@@ -20,6 +20,10 @@ inputs:
     description: Prefix used for GitHub cache restore/save keys
     required: false
     default: foundry-cache-boost
+
+outputs:
+  resolved-block-numbers-json:
+    description: JSON object mapping each chain name to its resolved block number in decimal format
 
 runs:
   using: node24
