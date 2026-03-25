@@ -44,8 +44,8 @@ jobs:
         id: npm-ci-test
         run: npm run ci-test
 
-  test-action:
-    name: GitHub Actions Test
+  test-action-no-cache:
+    name: GitHub Actions Test (no cache)
     runs-on: ubuntu-latest
 
     steps:
@@ -64,6 +64,51 @@ jobs:
         uses: ./
         with:
           block: latest
+          storage-input-path: .github/storage-input.ci.json
+          rpc-endpoints-json: '{"mainnet":"http://127.0.0.1:8545"}'
+          cache-key-prefix: foundry-cache-boost-ci-${{ github.run_id }}-${{ github.run_attempt }}
+
+  test-action:
+    name: GitHub Actions Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        id: checkout
+        uses: actions/checkout@v6
+
+      - name: Prepare Action Inputs
+        id: prepare-inputs
+        run: |
+          mkdir -p .github
+          echo '{"chains":{}}' > .github/storage-input.ci.json
+
+      - name: Mock Foundry Cache
+        id: mock-cache
+        run: |
+          mkdir -p ~/.foundry/cache/rpc/mainnet
+          echo << EOF > ~/.foundry/cache/rpc/mainnet/420
+          {
+            "storage": {
+              "0xbb256c2f1b677e27118b0345fd2b3894d2e6d487": {
+                "0x8": "0x100000930020331891ebc5365190e79876812e91e000000d0f542b16972d95b",
+                "0x2": "0x1d6c694252e187e53f577bdb00ccb0ce1",
+                "0x0": "0x100003300330000ffffdc0000000000000000ff8be44946ea45710f061d92",
+                "0x1": "0xf9eb2201cbc83ae306a3757b6debba3",
+                "0x63187d71e139eee983a88d0737447c7451979b3dbb75903c76b5fe430d36588e": "0x9000004000000000000000000000000000000000000000000000000000000000",
+                "0x54cdd369e4e8a8515e52ca72ec816c2101831ad1f18bf44102ed171459c9b4f8": "0x6f",
+                "0x9": "0x10000093001d8df5b11ba3b5a757aaef54d14336f000000d363039569156ddf",
+                "0x4": "0x2a24e4e1d"
+              }
+            }
+          }
+          EOF
+
+      - name: Test Local Action
+        id: test-action
+        uses: ./
+        with:
+          block: 440
           storage-input-path: .github/storage-input.ci.json
           rpc-endpoints-json: '{"mainnet":"http://127.0.0.1:8545"}'
           cache-key-prefix: foundry-cache-boost-ci-${{ github.run_id }}-${{ github.run_attempt }}
