@@ -58,7 +58,7 @@ jobs:
         uses: ./
         with:
           block: 24735604
-          rpc-endpoints-json: '{"mainnet":"https://eth.meowrpc.com"}'
+          rpc-endpoints-json: '{"mainnet":"https://eth.drpc.org"}'
           cache-key-prefix: foundry-cache-boost-ci-mainnet
 
       - name: Mock Foundry Cache (previous run data)
@@ -97,7 +97,7 @@ jobs:
         uses: ./
         with:
           block: 24735604
-          rpc-endpoints-json: '{"mainnet":"https://eth.meowrpc.com"}'
+          rpc-endpoints-json: '{"mainnet":"https://eth.drpc.org"}'
           cache-key-prefix: foundry-cache-boost-ci-mainnet
 
       - name: Assert mocked slots were restored
