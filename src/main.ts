@@ -79,6 +79,15 @@ export async function run(): Promise<void> {
     for (const [chain, rpcUrl] of Object.entries(rpcEndpoints)) {
       const hintsForChain = slotHints?.chains[chain]
       const requested = hintsForChain ?? {}
+      const requestedAddressCount = Object.keys(requested).length
+      const requestedSlotCount = Object.values(requested).reduce(
+        (count, slots) => count + slots.length,
+        0
+      )
+
+      core.debug(
+        `Chain ${chain} requested from cache hints: ${requestedAddressCount} address(es), ${requestedSlotCount} slot(s)`
+      )
 
       if (Object.keys(requested).length === 0) {
         core.info(`Skipping chain ${chain}: no slots requested`)

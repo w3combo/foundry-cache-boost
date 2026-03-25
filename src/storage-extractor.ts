@@ -1,3 +1,4 @@
+import * as core from '@actions/core'
 import { normalizeSlot } from './input-utils.js'
 
 const OVERRIDE_STORAGE_READER_CODE =
@@ -233,6 +234,14 @@ export async function extractStorageValues(
   }
 
   const jobs = buildJobs(storageInput)
+  const requestedAddressCount = Object.keys(storageInput).length
+  const requestedSlotCount = jobs.reduce(
+    (count, job) => count + job.slots.length,
+    0
+  )
+  core.debug(
+    `Storage extractor request prepared: ${requestedAddressCount} address(es), ${requestedSlotCount} slot(s), ${jobs.length} batch job(s), block ${blockIdentifier}`
+  )
   let requestId = 1
 
   let cursor = 0
@@ -263,6 +272,15 @@ export async function extractStorageValues(
     if (batchJobs.length === 0) {
       continue
     }
+
+    const batchAddressCount = batchJobs.length
+    const batchSlotCount = batchJobs.reduce(
+      (count, job) => count + job.slots.length,
+      0
+    )
+    core.debug(
+      `Processing extraction batch: ${batchAddressCount} address(es), ${batchSlotCount} slot(s)`
+    )
 
     const calls: AggregateCall[] = []
     const stateOverrides: Record<string, { code: string }> = {}
@@ -295,6 +313,7 @@ export async function extractStorageValues(
 
     let rpcResult: unknown
     let rpcSuccess = false
+    let rpcFailureReason: string | undefined
 
     for (let attempt = 0; attempt < MAX_RETRIES; attempt += 1) {
       requestId += 1
@@ -307,7 +326,12 @@ export async function extractStorageValues(
         )
         rpcSuccess = true
         break
-      } catch {
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        rpcFailureReason = message
+        core.debug(
+          `eth_call attempt ${attempt + 1}/${MAX_RETRIES} failed: ${message}`
+        )
         await sleep(150 * (attempt + 1))
       }
     }
@@ -317,26 +341,36 @@ export async function extractStorageValues(
       typeof rpcResult !== 'string' ||
       !rpcResult.startsWith('0x')
     ) {
+      core.debug(
+        `Skipping batch after eth_call failure. Last reason: ${rpcFailureReason ?? 'missing/invalid result'}`
+      )
       continue
     }
 
     let decoded: Array<{ success: boolean; data: Buffer }>
     try {
       decoded = decodeAggregate3Result(rpcResult)
-    } catch {
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      core.debug(`Failed to decode aggregate3 result: ${message}`)
       continue
     }
 
     const callCount = Math.min(decoded.length, batchJobs.length)
+    let extractedInBatch = 0
     for (let index = 0; index < callCount; index += 1) {
       const { success, data } = decoded[index]
       if (!success) {
+        core.debug(`aggregate3 call ${index} returned success=false`)
         continue
       }
 
       const { address, slots } = batchJobs[index]
       const expectedLength = slots.length * 32
       if (data.length < expectedLength) {
+        core.debug(
+          `aggregate3 call ${index} returned ${data.length} bytes, expected at least ${expectedLength}`
+        )
         continue
       }
 
@@ -351,9 +385,22 @@ export async function extractStorageValues(
         output[address][slots[slotIndex]] = normalizeHexValue(
           `0x${word.toString('hex')}`
         )
+        extractedInBatch += 1
       }
     }
+
+    core.debug(
+      `Finished extraction batch: extracted ${extractedInBatch} slot value(s) across ${callCount} decoded call(s)`
+    )
   }
+
+  const totalExtracted = Object.values(output).reduce(
+    (count, slotMap) => count + Object.keys(slotMap).length,
+    0
+  )
+  core.debug(
+    `Storage extractor completed: extracted ${totalExtracted}/${requestedSlotCount} requested slot(s)`
+  )
 
   return output
 }

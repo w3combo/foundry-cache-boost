@@ -1,4 +1,4 @@
-import { n as normalizeSlot, g as getInput, a as normalizeBlockIdentifier, p as parseRpcEndpointsJson, e as ensureBoostCacheDir, b as getSlotHintsPath, c as buildCacheKeys, d as cacheExports, s as saveState, C as CACHE_PRIMARY_KEY_STATE, f as CACHE_MATCHED_KEY_STATE, i as info, r as readSlotHintsFile, h as setFailed } from './input-utils-DdD4JbKv.js';
+import { d as debug, n as normalizeSlot, g as getInput, a as normalizeBlockIdentifier, p as parseRpcEndpointsJson, e as ensureBoostCacheDir, b as getSlotHintsPath, c as buildCacheKeys, f as cacheExports, s as saveState, C as CACHE_PRIMARY_KEY_STATE, h as CACHE_MATCHED_KEY_STATE, i as info, r as readSlotHintsFile, j as setFailed } from './input-utils-DV1L7bCE.js';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import 'os';
@@ -212,6 +212,9 @@ async function extractStorageValues(rpcUrl, storageInput, blockIdentifier) {
         output[address] = {};
     }
     const jobs = buildJobs(storageInput);
+    const requestedAddressCount = Object.keys(storageInput).length;
+    const requestedSlotCount = jobs.reduce((count, job) => count + job.slots.length, 0);
+    debug(`Storage extractor request prepared: ${requestedAddressCount} address(es), ${requestedSlotCount} slot(s), ${jobs.length} batch job(s), block ${blockIdentifier}`);
     let requestId = 1;
     let cursor = 0;
     while (cursor < jobs.length) {
@@ -236,6 +239,9 @@ async function extractStorageValues(rpcUrl, storageInput, blockIdentifier) {
         if (batchJobs.length === 0) {
             continue;
         }
+        const batchAddressCount = batchJobs.length;
+        const batchSlotCount = batchJobs.reduce((count, job) => count + job.slots.length, 0);
+        debug(`Processing extraction batch: ${batchAddressCount} address(es), ${batchSlotCount} slot(s)`);
         const calls = [];
         const stateOverrides = {};
         for (const { address, slots } of batchJobs) {
@@ -264,6 +270,7 @@ async function extractStorageValues(rpcUrl, storageInput, blockIdentifier) {
         ];
         let rpcResult;
         let rpcSuccess = false;
+        let rpcFailureReason;
         for (let attempt = 0; attempt < MAX_RETRIES; attempt += 1) {
             requestId += 1;
             try {
@@ -271,31 +278,40 @@ async function extractStorageValues(rpcUrl, storageInput, blockIdentifier) {
                 rpcSuccess = true;
                 break;
             }
-            catch {
+            catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                rpcFailureReason = message;
+                debug(`eth_call attempt ${attempt + 1}/${MAX_RETRIES} failed: ${message}`);
                 await sleep(150 * (attempt + 1));
             }
         }
         if (!rpcSuccess ||
             typeof rpcResult !== 'string' ||
             !rpcResult.startsWith('0x')) {
+            debug(`Skipping batch after eth_call failure. Last reason: ${rpcFailureReason ?? 'missing/invalid result'}`);
             continue;
         }
         let decoded;
         try {
             decoded = decodeAggregate3Result(rpcResult);
         }
-        catch {
+        catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            debug(`Failed to decode aggregate3 result: ${message}`);
             continue;
         }
         const callCount = Math.min(decoded.length, batchJobs.length);
+        let extractedInBatch = 0;
         for (let index = 0; index < callCount; index += 1) {
             const { success, data } = decoded[index];
             if (!success) {
+                debug(`aggregate3 call ${index} returned success=false`);
                 continue;
             }
             const { address, slots } = batchJobs[index];
             const expectedLength = slots.length * 32;
             if (data.length < expectedLength) {
+                debug(`aggregate3 call ${index} returned ${data.length} bytes, expected at least ${expectedLength}`);
                 continue;
             }
             for (let slotIndex = 0; slotIndex < slots.length; slotIndex += 1) {
@@ -306,9 +322,13 @@ async function extractStorageValues(rpcUrl, storageInput, blockIdentifier) {
                 }
                 const word = data.subarray(start, end);
                 output[address][slots[slotIndex]] = normalizeHexValue(`0x${word.toString('hex')}`);
+                extractedInBatch += 1;
             }
         }
+        debug(`Finished extraction batch: extracted ${extractedInBatch} slot value(s) across ${callCount} decoded call(s)`);
     }
+    const totalExtracted = Object.values(output).reduce((count, slotMap) => count + Object.keys(slotMap).length, 0);
+    debug(`Storage extractor completed: extracted ${totalExtracted}/${requestedSlotCount} requested slot(s)`);
     return output;
 }
 
@@ -349,6 +369,9 @@ async function run() {
         for (const [chain, rpcUrl] of Object.entries(rpcEndpoints)) {
             const hintsForChain = slotHints?.chains[chain];
             const requested = hintsForChain ?? {};
+            const requestedAddressCount = Object.keys(requested).length;
+            const requestedSlotCount = Object.values(requested).reduce((count, slots) => count + slots.length, 0);
+            debug(`Chain ${chain} requested from cache hints: ${requestedAddressCount} address(es), ${requestedSlotCount} slot(s)`);
             if (Object.keys(requested).length === 0) {
                 info(`Skipping chain ${chain}: no slots requested`);
                 continue;
