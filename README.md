@@ -53,7 +53,7 @@ jobs:
 
 - [x] Getting back slots keys after test runs and storing them in the cache
 - [x] Getting back slots values in batch before test runs
-- [ ] Patch Foundry's RPC cache with "fake blocks" containing the real slots values 
+- [ ] Patch Foundry's RPC cache with "fake blocks" containing the extracted values
 - [ ] Cache deployed bytecode and code hashes
 
 ## Development
