@@ -402,10 +402,10 @@ async function resolveConcreteBlock(rpcUrl, blockIdentifier) {
     }
     return `0x${BigInt(blockObject.number).toString(16)}`;
 }
-async function writeStorageValues(chain, block, values) {
+async function writeStorageValues(chain, blockNumber, values) {
     const outputDir = join(process.env.HOME ?? process.env.USERPROFILE ?? '.', '.foundry', 'cache', 'rpc', chain);
     await mkdir(outputDir, { recursive: true });
-    const outputPath = join(outputDir, block);
+    const outputPath = join(outputDir, blockNumber.toString(10));
     let outputRoot = {};
     try {
         const outputPathStats = await stat(outputPath);
@@ -487,13 +487,14 @@ async function run() {
             const requestedSlotCount = Object.values(requested).reduce((count, slots) => count + slots.length, 0);
             debug(`Chain ${chain} requested from cache hints: ${requestedAddressCount} address(es), ${requestedSlotCount} slot(s)`);
             const concreteBlock = await resolveConcreteBlock(rpcUrl, chainBlockIdentifier);
-            resolvedBlockNumbersByChain[chain] = BigInt(concreteBlock).toString(10);
+            const concreteBlockNumber = BigInt(concreteBlock);
+            resolvedBlockNumbersByChain[chain] = concreteBlockNumber.toString(10);
             if (Object.keys(requested).length === 0) {
                 info(`Skipping chain ${chain}: no slots requested`);
                 continue;
             }
             const values = await extractStorageValues(rpcUrl, requested, concreteBlock);
-            await writeStorageValues(chain, concreteBlock, values);
+            await writeStorageValues(chain, concreteBlockNumber, values);
             const addressCount = Object.keys(values).length;
             const slotCount = Object.values(values).reduce((count, slotMap) => count + Object.keys(slotMap).length, 0);
             info(`Retrieved ${slotCount} slot values across ${addressCount} address(es) for chain ${chain}`);

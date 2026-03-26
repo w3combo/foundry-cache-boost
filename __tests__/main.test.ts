@@ -182,7 +182,7 @@ describe('main.ts', () => {
     expect(writeFile).toHaveBeenCalledTimes(1)
     expect(writeFile).toHaveBeenNthCalledWith(
       1,
-      '/home/tester/.foundry/cache/rpc/mainnet/0x123',
+      '/home/tester/.foundry/cache/rpc/mainnet/291',
       expect.stringContaining('"storage"'),
       'utf-8'
     )
@@ -253,9 +253,7 @@ describe('main.ts', () => {
 
     expect(readFile).not.toHaveBeenCalled()
     expect(writeFile).not.toHaveBeenCalled()
-    expect(core.info).toHaveBeenCalledWith(
-      'Skipping /home/tester/.foundry/cache/rpc/mainnet/0x123: path is a directory'
-    )
+    expect(core.info).toHaveBeenCalledWith('Skipping /home/tester/.foundry/cache/rpc/mainnet/291: path is a directory')
   })
 
   it('Skips writing when existing file has malformed JSON', async () => {
@@ -268,7 +266,7 @@ describe('main.ts', () => {
     await run()
 
     expect(writeFile).not.toHaveBeenCalled()
-    expect(core.info).toHaveBeenCalledWith('Skipping /home/tester/.foundry/cache/rpc/mainnet/0x123: malformed JSON')
+    expect(core.info).toHaveBeenCalledWith('Skipping /home/tester/.foundry/cache/rpc/mainnet/291: malformed JSON')
   })
 
   it('Merges fetched storage with an existing valid block cache file', async () => {
