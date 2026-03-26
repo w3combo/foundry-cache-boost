@@ -10,7 +10,7 @@ import {
   getSlotHintsPath,
   writeSlotHintsFile
 } from './cache-utils.js'
-import { isBlockWithinWindow, normalizeBlockIdentifier, parseNumericBlock } from './input-utils.js'
+import { isBlockWithinWindow, parseBlockConfig, parseNumericBlock, resolveBlockForChain } from './input-utils.js'
 
 function extractFileBlockNumber(fileName: string): bigint | undefined {
   const stem = basename(fileName, '.json')
@@ -68,8 +68,7 @@ function toSerializableChains(
  */
 export async function runPost(): Promise<void> {
   const rpcCacheDir = join(homedir(), '.foundry', 'cache', 'rpc')
-  const block = normalizeBlockIdentifier(core.getInput('block', { required: true }))
-  const numericBlock = parseNumericBlock(block)
+  const blockConfig = parseBlockConfig(core.getInput('block', { required: true }))
   const windowSize = getCacheWindow()
 
   try {
@@ -88,6 +87,15 @@ export async function runPost(): Promise<void> {
       }
 
       const chainName = chainEntry.name
+      if (blockConfig.blocksByChain[chainName] === undefined && blockConfig.defaultBlock === undefined) {
+        core.info(
+          `Skipping chain directory ${chainName}: no block mapping for this chain and no default block is configured`
+        )
+        continue
+      }
+
+      const blockForChain = resolveBlockForChain(blockConfig, chainName)
+      const numericBlockForChain = parseNumericBlock(blockForChain)
       const chainPath = join(rpcCacheDir, chainName)
       const children = await readdir(chainPath, { withFileTypes: true })
 
@@ -96,9 +104,9 @@ export async function runPost(): Promise<void> {
           continue
         }
 
-        if (numericBlock !== undefined) {
+        if (numericBlockForChain !== undefined) {
           const fileBlock = extractFileBlockNumber(child.name)
-          if (fileBlock === undefined || !isBlockWithinWindow(fileBlock, numericBlock, windowSize)) {
+          if (fileBlock === undefined || !isBlockWithinWindow(fileBlock, numericBlockForChain, windowSize)) {
             continue
           }
         }
@@ -126,14 +134,28 @@ export async function runPost(): Promise<void> {
     }
 
     const serializable = toSerializableChains(aggregate)
-    await writeSlotHintsFile({
-      chains: serializable,
-      meta: {
-        generatedAt: new Date().toISOString(),
-        block,
-        window: Number(windowSize)
-      }
-    })
+    const metaBase = {
+      generatedAt: new Date().toISOString(),
+      window: Number(windowSize)
+    }
+
+    await writeSlotHintsFile(
+      blockConfig.defaultBlock === undefined
+        ? {
+            chains: serializable,
+            meta: {
+              ...metaBase,
+              blocksByChain: blockConfig.blocksByChain
+            }
+          }
+        : {
+            chains: serializable,
+            meta: {
+              ...metaBase,
+              block: blockConfig.defaultBlock
+            }
+          }
+    )
 
     const primaryKey = core.getState(CACHE_PRIMARY_KEY_STATE)
     const matchedKey = core.getState(CACHE_MATCHED_KEY_STATE)

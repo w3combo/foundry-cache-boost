@@ -1,4 +1,4 @@
-import { a as normalizeBlockIdentifier, g as getInput, k as parseNumericBlock, i as info, l as isBlockWithinWindow, w as writeSlotHintsFile, m as getState, C as CACHE_PRIMARY_KEY_STATE, h as CACHE_MATCHED_KEY_STATE, o as warning, f as cacheExports, b as getSlotHintsPath, j as setFailed, q as getCacheWindow } from './input-utils-CpIwri7H.js';
+import { p as parseBlockConfig, g as getInput, i as info, j as resolveBlockForChain, m as parseNumericBlock, o as isBlockWithinWindow, w as writeSlotHintsFile, q as getState, C as CACHE_PRIMARY_KEY_STATE, h as CACHE_MATCHED_KEY_STATE, t as warning, f as cacheExports, b as getSlotHintsPath, l as setFailed, u as getCacheWindow } from './input-utils-BRIbjqDX.js';
 import { readdir, readFile } from 'node:fs/promises';
 import { join, basename } from 'node:path';
 import { homedir } from 'node:os';
@@ -87,8 +87,7 @@ function toSerializableChains(aggregate) {
  */
 async function runPost() {
     const rpcCacheDir = join(homedir(), '.foundry', 'cache', 'rpc');
-    const block = normalizeBlockIdentifier(getInput('block', { required: true }));
-    const numericBlock = parseNumericBlock(block);
+    const blockConfig = parseBlockConfig(getInput('block', { required: true }));
     const windowSize = getCacheWindow();
     try {
         const chainEntries = await readdir(rpcCacheDir, { withFileTypes: true });
@@ -102,15 +101,21 @@ async function runPost() {
                 continue;
             }
             const chainName = chainEntry.name;
+            if (blockConfig.blocksByChain[chainName] === undefined && blockConfig.defaultBlock === undefined) {
+                info(`Skipping chain directory ${chainName}: no block mapping for this chain and no default block is configured`);
+                continue;
+            }
+            const blockForChain = resolveBlockForChain(blockConfig, chainName);
+            const numericBlockForChain = parseNumericBlock(blockForChain);
             const chainPath = join(rpcCacheDir, chainName);
             const children = await readdir(chainPath, { withFileTypes: true });
             for (const child of children) {
                 if (!child.isFile()) {
                     continue;
                 }
-                if (numericBlock !== undefined) {
+                if (numericBlockForChain !== undefined) {
                     const fileBlock = extractFileBlockNumber(child.name);
-                    if (fileBlock === undefined || !isBlockWithinWindow(fileBlock, numericBlock, windowSize)) {
+                    if (fileBlock === undefined || !isBlockWithinWindow(fileBlock, numericBlockForChain, windowSize)) {
                         continue;
                     }
                 }
@@ -133,14 +138,25 @@ async function runPost() {
             }
         }
         const serializable = toSerializableChains(aggregate);
-        await writeSlotHintsFile({
-            chains: serializable,
-            meta: {
-                generatedAt: new Date().toISOString(),
-                block,
-                window: Number(windowSize)
+        const metaBase = {
+            generatedAt: new Date().toISOString(),
+            window: Number(windowSize)
+        };
+        await writeSlotHintsFile(blockConfig.defaultBlock === undefined
+            ? {
+                chains: serializable,
+                meta: {
+                    ...metaBase,
+                    blocksByChain: blockConfig.blocksByChain
+                }
             }
-        });
+            : {
+                chains: serializable,
+                meta: {
+                    ...metaBase,
+                    block: blockConfig.defaultBlock
+                }
+            });
         const primaryKey = getState(CACHE_PRIMARY_KEY_STATE);
         const matchedKey = getState(CACHE_MATCHED_KEY_STATE);
         if (!primaryKey) {

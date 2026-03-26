@@ -11,7 +11,8 @@ export interface AggregatedSlotsPayload {
   chains: Record<string, Record<string, string[]>>
   meta: {
     generatedAt: string
-    block: string
+    block?: string
+    blocksByChain?: Record<string, string>
     window: number
   }
 }
