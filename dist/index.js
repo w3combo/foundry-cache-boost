@@ -318,6 +318,74 @@ async function extractStorageValues(rpcUrl, storageInput, blockIdentifier) {
     return output;
 }
 
+const ADDRESS_ZERO = '0x0000000000000000000000000000000000000000';
+function isRecord(value) {
+    return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+function normalizeHexString(value, fallback) {
+    if (typeof value !== 'string') {
+        return fallback;
+    }
+    if (!value.startsWith('0x')) {
+        return fallback;
+    }
+    try {
+        return `0x${BigInt(value).toString(16)}`;
+    }
+    catch {
+        return fallback;
+    }
+}
+function toHexBlockTag(blockIdentifier) {
+    if (/^0x[0-9a-f]+$/i.test(blockIdentifier)) {
+        return `0x${BigInt(blockIdentifier).toString(16)}`;
+    }
+    if (/^\d+$/.test(blockIdentifier)) {
+        return `0x${BigInt(blockIdentifier).toString(16)}`;
+    }
+    return blockIdentifier;
+}
+function normalizeAddress(value) {
+    if (typeof value !== 'string') {
+        return ADDRESS_ZERO;
+    }
+    const lowered = value.toLowerCase();
+    if (/^0x[0-9a-f]{40}$/.test(lowered)) {
+        return lowered;
+    }
+    return ADDRESS_ZERO;
+}
+function hexToNumber(value, fallback) {
+    if (typeof value !== 'string' || !value.startsWith('0x')) {
+        return fallback;
+    }
+    try {
+        const parsed = Number(BigInt(value));
+        if (Number.isNaN(parsed)) {
+            return fallback;
+        }
+        return parsed;
+    }
+    catch {
+        return fallback;
+    }
+}
+function buildBlockEnv(block, blobBaseFeeHex) {
+    const prevrandaoHex = normalizeHexString(block.prevRandao ?? block.mixHash, '0x0');
+    return {
+        number: normalizeHexString(block.number, '0x0'),
+        beneficiary: normalizeAddress(block.miner),
+        timestamp: normalizeHexString(block.timestamp, '0x0'),
+        gas_limit: hexToNumber(block.gasLimit, 0),
+        basefee: hexToNumber(block.baseFeePerGas, 0),
+        difficulty: normalizeHexString(block.difficulty, '0x0'),
+        prevrandao: prevrandaoHex,
+        blob_excess_gas_and_price: {
+            excess_blob_gas: hexToNumber(block.excessBlobGas, 0),
+            blob_gasprice: blobBaseFeeHex === undefined ? 1 : hexToNumber(blobBaseFeeHex, 1)
+        }
+    };
+}
 function parseStorageField(storage) {
     if (!storage || typeof storage !== 'object' || Array.isArray(storage)) {
         return {};
@@ -388,11 +456,21 @@ async function jsonRpcCall(rpcUrl, method, params) {
     }
     return parsedObj.result;
 }
-async function resolveConcreteBlock(rpcUrl, blockIdentifier) {
-    if (/^0x[0-9a-f]+$/i.test(blockIdentifier) || /^\d+$/.test(blockIdentifier)) {
-        return blockIdentifier;
+async function fetchBlobBaseFee(rpcUrl) {
+    try {
+        const result = await jsonRpcCall(rpcUrl, 'eth_blobBaseFee', []);
+        if (typeof result !== 'string') {
+            return undefined;
+        }
+        return normalizeHexString(result, '0x1');
     }
-    const blockResult = await jsonRpcCall(rpcUrl, 'eth_getBlockByNumber', [blockIdentifier, false]);
+    catch {
+        return undefined;
+    }
+}
+async function resolveConcreteBlock(rpcUrl, blockIdentifier) {
+    const blockTag = toHexBlockTag(blockIdentifier);
+    const blockResult = await jsonRpcCall(rpcUrl, 'eth_getBlockByNumber', [blockTag, false]);
     if (!blockResult || typeof blockResult !== 'object') {
         throw new Error(`Unable to resolve block tag ${blockIdentifier}: RPC returned invalid block payload`);
     }
@@ -400,9 +478,14 @@ async function resolveConcreteBlock(rpcUrl, blockIdentifier) {
     if (typeof blockObject.number !== 'string') {
         throw new Error(`Unable to resolve block tag ${blockIdentifier}: missing block number`);
     }
-    return `0x${BigInt(blockObject.number).toString(16)}`;
+    const normalizedBlockHex = normalizeHexString(blockObject.number, '0x0');
+    const blobBaseFeeHex = await fetchBlobBaseFee(rpcUrl);
+    return {
+        blockHex: normalizedBlockHex,
+        blockEnv: buildBlockEnv(blockObject, blobBaseFeeHex)
+    };
 }
-async function writeStorageValues(chain, blockNumber, values) {
+async function writeStorageValues(chain, blockNumber, values, blockEnv) {
     const outputDir = join(process.env.HOME ?? process.env.USERPROFILE ?? '.', '.foundry', 'cache', 'rpc', chain);
     await mkdir(outputDir, { recursive: true });
     const outputPath = join(outputDir, blockNumber.toString(10));
@@ -448,7 +531,17 @@ async function writeStorageValues(chain, blockNumber, values) {
     }
     const existingStorage = parseStorageField(outputRoot.storage);
     const mergedStorage = mergeStorageValues(existingStorage, values);
-    const rendered = `${JSON.stringify({ ...outputRoot, storage: mergedStorage }, null, 2)}\n`;
+    const existingMeta = isRecord(outputRoot.meta) ? outputRoot.meta : {};
+    const rendered = `${JSON.stringify({
+        ...outputRoot,
+        meta: {
+            ...existingMeta,
+            block_env: blockEnv,
+            hosts: ['localhost']
+        },
+        accounts: {},
+        storage: mergedStorage
+    }, null, 2)}\n`;
     await writeFile(outputPath, rendered, 'utf-8');
 }
 /**
@@ -486,15 +579,15 @@ async function run() {
             const requestedAddressCount = Object.keys(requested).length;
             const requestedSlotCount = Object.values(requested).reduce((count, slots) => count + slots.length, 0);
             debug(`Chain ${chain} requested from cache hints: ${requestedAddressCount} address(es), ${requestedSlotCount} slot(s)`);
-            const concreteBlock = await resolveConcreteBlock(rpcUrl, chainBlockIdentifier);
-            const concreteBlockNumber = BigInt(concreteBlock);
+            const resolvedBlock = await resolveConcreteBlock(rpcUrl, chainBlockIdentifier);
+            const concreteBlockNumber = BigInt(resolvedBlock.blockHex);
             resolvedBlockNumbersByChain[chain] = concreteBlockNumber.toString(10);
             if (Object.keys(requested).length === 0) {
                 info(`Skipping chain ${chain}: no slots requested`);
                 continue;
             }
-            const values = await extractStorageValues(rpcUrl, requested, concreteBlock);
-            await writeStorageValues(chain, concreteBlockNumber, values);
+            const values = await extractStorageValues(rpcUrl, requested, resolvedBlock.blockHex);
+            await writeStorageValues(chain, concreteBlockNumber, values, resolvedBlock.blockEnv);
             const addressCount = Object.keys(values).length;
             const slotCount = Object.values(values).reduce((count, slotMap) => count + Object.keys(slotMap).length, 0);
             info(`Retrieved ${slotCount} slot values across ${addressCount} address(es) for chain ${chain}`);

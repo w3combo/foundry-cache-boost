@@ -111,18 +111,52 @@ describe('main.ts', () => {
     parseRpcEndpointsJson.mockReturnValue({
       mainnet: 'https://rpc'
     })
-    fetchMock.mockResolvedValue({
-      ok: true,
-      status: 200,
-      text: async () =>
-        JSON.stringify({
-          jsonrpc: '2.0',
-          id: 1,
-          result: {
-            number: '0x123'
-          }
-        })
-    } as Response)
+    fetchMock.mockImplementation(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const parsed = JSON.parse(String(init?.body ?? '{}')) as {
+        method?: string
+      }
+
+      if (parsed.method === 'eth_getBlockByNumber') {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              jsonrpc: '2.0',
+              id: 1,
+              result: {
+                number: '0x123',
+                miner: '0xDdAbD0D80178819f2319190D340ce9A924F78371',
+                timestamp: '0x69a74ec3',
+                gasLimit: '0x5b8d80',
+                baseFeePerGas: '0x8933f00',
+                difficulty: '0x087353b2df9daa3c11ed7558e88cc9886f6bf7d0de9430c65f6308fd86576ce0',
+                prevRandao: '0x087353b2df9daa3c11ed7558e88cc9886f6bf7d0de9430c65f6308fd86576ce0',
+                excessBlobGas: '0x0'
+              }
+            })
+        } as Response
+      }
+
+      if (parsed.method === 'eth_blobBaseFee') {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              jsonrpc: '2.0',
+              id: 1,
+              result: '0x1'
+            })
+        } as Response
+      }
+
+      return {
+        ok: false,
+        status: 400,
+        text: async () => 'unsupported method'
+      } as Response
+    })
     readSlotHintsFile.mockResolvedValue({
       chains: {
         mainnet: {
@@ -186,6 +220,50 @@ describe('main.ts', () => {
       expect.stringContaining('"storage"'),
       'utf-8'
     )
+
+    const parsed = JSON.parse(writeFile.mock.calls[0][1]) as {
+      meta: {
+        block_env: {
+          number: string
+          beneficiary: string
+          timestamp: string
+          gas_limit: number
+          basefee: number
+          difficulty: string
+          prevrandao: string
+          blob_excess_gas_and_price: {
+            excess_blob_gas: number
+            blob_gasprice: number
+          }
+        }
+        hosts: string[]
+      }
+      accounts: Record<string, unknown>
+    }
+
+    expect(parsed.accounts).toEqual({})
+    expect(parsed.meta.hosts).toEqual(['localhost'])
+    expect(parsed.meta.block_env.number).toBe('0x123')
+    expect(parsed.meta.block_env.beneficiary).toBe('0xddabd0d80178819f2319190d340ce9a924f78371')
+    expect(parsed.meta.block_env.timestamp).toBe('0x69a74ec3')
+    expect(parsed.meta.block_env.gas_limit).toBe(6000000)
+    expect(parsed.meta.block_env.basefee).toBe(143867648)
+    expect(parsed.meta.block_env.difficulty).toBe('0x87353b2df9daa3c11ed7558e88cc9886f6bf7d0de9430c65f6308fd86576ce0')
+    expect(parsed.meta.block_env.prevrandao).toBe('0x87353b2df9daa3c11ed7558e88cc9886f6bf7d0de9430c65f6308fd86576ce0')
+    expect(parsed.meta.block_env.blob_excess_gas_and_price).toEqual({
+      excess_blob_gas: 0,
+      blob_gasprice: 1
+    })
+
+    expect(typeof parsed.meta).toBe('object')
+    expect(typeof parsed.meta.block_env).toBe('object')
+    expect(typeof parsed.meta.block_env.number).toBe('string')
+    expect(typeof parsed.meta.block_env.beneficiary).toBe('string')
+    expect(typeof parsed.meta.block_env.timestamp).toBe('string')
+    expect(typeof parsed.meta.block_env.gas_limit).toBe('number')
+    expect(typeof parsed.meta.block_env.basefee).toBe('number')
+    expect(typeof parsed.meta.block_env.difficulty).toBe('string')
+    expect(typeof parsed.meta.block_env.prevrandao).toBe('string')
   })
 
   it('Sets a failed status', async () => {
@@ -294,11 +372,21 @@ describe('main.ts', () => {
     expect(writeFile).toHaveBeenCalledTimes(1)
     const writtenContent = writeFile.mock.calls[0][1]
     const parsed = JSON.parse(writtenContent) as {
+      meta: {
+        block_env: {
+          number: string
+        }
+        hosts: string[]
+      }
+      accounts: Record<string, unknown>
       storage: Record<string, Record<string, string>>
       transactions: string[]
     }
 
     expect(parsed.transactions).toEqual(['0xabc'])
+    expect(parsed.accounts).toEqual({})
+    expect(parsed.meta.hosts).toEqual(['localhost'])
+    expect(parsed.meta.block_env.number).toBe('0x123')
     expect(parsed.storage).toEqual({
       '0x1234567890abcdef1234567890abcdef12345678': {
         '0x0': '0x1',
@@ -307,6 +395,80 @@ describe('main.ts', () => {
       '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa': {
         '0x2': '0xkeep'
       }
+    })
+  })
+
+  it('Falls back for missing optional block fields and uses mixHash as prevrandao', async () => {
+    fetchMock.mockImplementationOnce(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const parsed = JSON.parse(String(init?.body ?? '{}')) as {
+        method?: string
+      }
+
+      if (parsed.method === 'eth_getBlockByNumber') {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              jsonrpc: '2.0',
+              id: 1,
+              result: {
+                number: '0x123',
+                miner: '0xDdAbD0D80178819f2319190D340ce9A924F78371',
+                timestamp: '0x69a74ec3',
+                gasLimit: '0x5b8d80',
+                baseFeePerGas: null,
+                difficulty: '0x01',
+                mixHash: '0xabc',
+                excessBlobGas: null
+              }
+            })
+        } as Response
+      }
+
+      if (parsed.method === 'eth_blobBaseFee') {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              jsonrpc: '2.0',
+              id: 1,
+              error: {
+                code: -32601,
+                message: 'method not found'
+              }
+            })
+        } as Response
+      }
+
+      return {
+        ok: false,
+        status: 400,
+        text: async () => 'unsupported method'
+      } as Response
+    })
+
+    await run()
+
+    const parsed = JSON.parse(writeFile.mock.calls[0][1]) as {
+      meta: {
+        block_env: {
+          basefee: number
+          prevrandao: string
+          blob_excess_gas_and_price: {
+            excess_blob_gas: number
+            blob_gasprice: number
+          }
+        }
+      }
+    }
+
+    expect(parsed.meta.block_env.basefee).toBe(0)
+    expect(parsed.meta.block_env.prevrandao).toBe('0xabc')
+    expect(parsed.meta.block_env.blob_excess_gas_and_price).toEqual({
+      excess_blob_gas: 0,
+      blob_gasprice: 1
     })
   })
 })
