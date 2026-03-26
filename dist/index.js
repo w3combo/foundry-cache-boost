@@ -540,6 +540,7 @@ async function writeStorageValues(chain, blockNumber, values, blockEnv) {
             hosts: ['localhost']
         },
         accounts: {},
+        block_hashes: {},
         storage: mergedStorage
     }, null, 2)}\n`;
     await writeFile(outputPath, rendered, 'utf-8');

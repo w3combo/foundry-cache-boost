@@ -239,9 +239,11 @@ describe('main.ts', () => {
         hosts: string[]
       }
       accounts: Record<string, unknown>
+      block_hashes: Record<string, unknown>
     }
 
     expect(parsed.accounts).toEqual({})
+    expect(parsed.block_hashes).toEqual({})
     expect(parsed.meta.hosts).toEqual(['localhost'])
     expect(parsed.meta.block_env.number).toBe('0x123')
     expect(parsed.meta.block_env.beneficiary).toBe('0xddabd0d80178819f2319190d340ce9a924f78371')
@@ -379,12 +381,14 @@ describe('main.ts', () => {
         hosts: string[]
       }
       accounts: Record<string, unknown>
+      block_hashes: Record<string, unknown>
       storage: Record<string, Record<string, string>>
       transactions: string[]
     }
 
     expect(parsed.transactions).toEqual(['0xabc'])
     expect(parsed.accounts).toEqual({})
+    expect(parsed.block_hashes).toEqual({})
     expect(parsed.meta.hosts).toEqual(['localhost'])
     expect(parsed.meta.block_env.number).toBe('0x123')
     expect(parsed.storage).toEqual({

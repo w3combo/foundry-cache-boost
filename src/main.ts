@@ -318,6 +318,7 @@ async function writeStorageValues(
         hosts: ['localhost']
       },
       accounts: {},
+      block_hashes: {},
       storage: mergedStorage
     },
     null,
