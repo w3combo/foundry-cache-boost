@@ -69,6 +69,24 @@ function normalizeHexString(value: unknown, fallback: string): string {
   }
 }
 
+function normalizeHexBytes(value: unknown, fallback: string): string {
+  if (typeof value !== 'string') {
+    return fallback
+  }
+
+  if (!value.startsWith('0x')) {
+    return fallback
+  }
+
+  const body = value.slice(2).toLowerCase()
+  if (!/^[0-9a-f]+$/.test(body)) {
+    return fallback
+  }
+
+  const evenLengthBody = body.length % 2 === 0 ? body : `0${body}`
+  return `0x${evenLengthBody}`
+}
+
 function toHexBlockTag(blockIdentifier: string): string {
   if (/^0x[0-9a-f]+$/i.test(blockIdentifier)) {
     return `0x${BigInt(blockIdentifier).toString(16)}`
@@ -111,7 +129,7 @@ function hexToNumber(value: unknown, fallback: number): number {
 }
 
 function buildBlockEnv(block: RpcBlockPayload, blobBaseFeeHex: string | undefined): BlockEnv {
-  const prevrandaoHex = normalizeHexString(block.prevRandao ?? block.mixHash, '0x0')
+  const prevrandaoHex = normalizeHexBytes(block.prevRandao ?? block.mixHash, '0x00')
 
   return {
     number: normalizeHexString(block.number, '0x0'),
@@ -119,7 +137,7 @@ function buildBlockEnv(block: RpcBlockPayload, blobBaseFeeHex: string | undefine
     timestamp: normalizeHexString(block.timestamp, '0x0'),
     gas_limit: hexToNumber(block.gasLimit, 0),
     basefee: hexToNumber(block.baseFeePerGas, 0),
-    difficulty: normalizeHexString(block.difficulty, '0x0'),
+    difficulty: normalizeHexBytes(block.difficulty, '0x00'),
     prevrandao: prevrandaoHex,
     blob_excess_gas_and_price: {
       excess_blob_gas: hexToNumber(block.excessBlobGas, 0),
