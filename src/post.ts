@@ -87,6 +87,13 @@ export async function runPost(): Promise<void> {
       }
 
       const chainName = chainEntry.name
+      if (blockConfig.blocksByChain[chainName] === undefined && blockConfig.defaultBlock === undefined) {
+        core.info(
+          `Skipping chain directory ${chainName}: no block mapping for this chain and no default block is configured`
+        )
+        continue
+      }
+
       const blockForChain = resolveBlockForChain(blockConfig, chainName)
       const numericBlockForChain = parseNumericBlock(blockForChain)
       const chainPath = join(rpcCacheDir, chainName)

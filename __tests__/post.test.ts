@@ -208,4 +208,37 @@ describe('post.ts', () => {
       })
     )
   })
+
+  it('Skips unknown chain directories when no default block is configured', async () => {
+    const sepoliaDir = join(rpcRoot, 'sepolia')
+
+    parseBlockConfig.mockReturnValueOnce({
+      blocksByChain: {
+        mainnet: '0xbe'
+      }
+    })
+
+    readdir.mockImplementation(async (path: string) => {
+      if (path === rpcRoot) {
+        return [dir('mainnet'), dir('sepolia')]
+      }
+      if (path === mainnetDir) {
+        return [file('189.json')]
+      }
+      if (path === sepoliaDir) {
+        return [file('189.json')]
+      }
+      return []
+    })
+
+    await runPost()
+
+    expect(core.info).toHaveBeenCalledWith(
+      'Skipping chain directory sepolia: no block mapping for this chain and no default block is configured'
+    )
+    expect(readdir).not.toHaveBeenCalledWith(sepoliaDir, {
+      withFileTypes: true
+    })
+    expect(core.setFailed).not.toHaveBeenCalled()
+  })
 })
