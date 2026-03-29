@@ -28,6 +28,11 @@ type RpcBlockPayload = {
   excessBlobGas?: unknown
 }
 
+const ETHEREUM_MAINNET_CHAIN_ID = 1n
+const MAINNET_MERGE_BLOCK = 15_537_351n
+const BSC_MAINNET_CHAIN_ID = 56n
+const BSC_TESTNET_CHAIN_ID = 97n
+
 type BlockEnv = {
   number: string
   beneficiary: string
@@ -69,22 +74,17 @@ function normalizeHexString(value: unknown, fallback: string): string {
   }
 }
 
-function normalizeHexBytes(value: unknown, fallback: string): string {
-  if (typeof value !== 'string') {
+function normalizeB256(value: unknown, fallback: string): string {
+  if (typeof value !== 'string' || !value.startsWith('0x')) {
     return fallback
   }
 
-  if (!value.startsWith('0x')) {
+  try {
+    const parsed = BigInt(value)
+    return `0x${parsed.toString(16).padStart(64, '0')}`
+  } catch {
     return fallback
   }
-
-  const body = value.slice(2).toLowerCase()
-  if (!/^[0-9a-f]+$/.test(body)) {
-    return fallback
-  }
-
-  const evenLengthBody = body.length % 2 === 0 ? body : `0${body}`
-  return `0x${evenLengthBody}`
 }
 
 function toHexBlockTag(blockIdentifier: string): string {
@@ -128,17 +128,54 @@ function hexToNumber(value: unknown, fallback: number): number {
   }
 }
 
-function buildBlockEnv(block: RpcBlockPayload, blobBaseFeeHex: string | undefined): BlockEnv {
-  const prevrandaoHex = normalizeHexBytes(block.prevRandao ?? block.mixHash, '0x00')
+function hexToBigInt(value: string): bigint {
+  return BigInt(value)
+}
+
+function toHex(value: bigint): string {
+  return `0x${value.toString(16)}`
+}
+
+function toB256Hex(value: bigint): string {
+  return `0x${value.toString(16).padStart(64, '0')}`
+}
+
+function buildBlockEnv(
+  block: RpcBlockPayload,
+  blobBaseFeeHex: string | undefined,
+  chainId: bigint | undefined
+): BlockEnv {
+  const numberHex = normalizeHexString(block.number, '0x0')
+  const rawDifficultyHex = normalizeHexString(block.difficulty, '0x0')
+  const rawPrevrandaoHex = normalizeB256(block.prevRandao ?? block.mixHash, `0x${'0'.repeat(64)}`)
+
+  let effectiveDifficulty = hexToBigInt(rawDifficultyHex)
+  let effectivePrevrandao = hexToBigInt(rawPrevrandaoHex)
+
+  if (chainId === BSC_MAINNET_CHAIN_ID || chainId === BSC_TESTNET_CHAIN_ID) {
+    // Foundry maps BSC difficulty into prevrandao because mixHash/prevrandao is unreliable there.
+    effectivePrevrandao = effectiveDifficulty
+  }
+
+  const blockNumber = hexToBigInt(numberHex)
+  if (chainId === ETHEREUM_MAINNET_CHAIN_ID && blockNumber >= MAINNET_MERGE_BLOCK) {
+    // Foundry maps post-merge mainnet difficulty to prevrandao.
+    effectiveDifficulty = effectivePrevrandao
+  }
+
+  if (effectiveDifficulty === 0n) {
+    // Foundry also applies this fallback when difficulty is zero.
+    effectiveDifficulty = effectivePrevrandao
+  }
 
   return {
-    number: normalizeHexString(block.number, '0x0'),
+    number: numberHex,
     beneficiary: normalizeAddress(block.miner),
     timestamp: normalizeHexString(block.timestamp, '0x0'),
     gas_limit: hexToNumber(block.gasLimit, 0),
     basefee: hexToNumber(block.baseFeePerGas, 0),
-    difficulty: normalizeHexBytes(block.difficulty, '0x00'),
-    prevrandao: prevrandaoHex,
+    difficulty: toHex(effectiveDifficulty),
+    prevrandao: toB256Hex(effectivePrevrandao),
     blob_excess_gas_and_price: {
       excess_blob_gas: hexToNumber(block.excessBlobGas, 0),
       blob_gasprice: blobBaseFeeHex === undefined ? 1 : hexToNumber(blobBaseFeeHex, 1)
@@ -248,6 +285,19 @@ async function fetchBlobBaseFee(rpcUrl: string): Promise<string | undefined> {
   }
 }
 
+async function fetchChainId(rpcUrl: string): Promise<bigint | undefined> {
+  try {
+    const result = await jsonRpcCall(rpcUrl, 'eth_chainId', [])
+    if (typeof result !== 'string') {
+      return undefined
+    }
+
+    return BigInt(result)
+  } catch {
+    return undefined
+  }
+}
+
 async function resolveConcreteBlock(rpcUrl: string, blockIdentifier: string): Promise<ResolvedBlockContext> {
   const blockTag = toHexBlockTag(blockIdentifier)
   const blockResult = await jsonRpcCall(rpcUrl, 'eth_getBlockByNumber', [blockTag, false])
@@ -263,10 +313,11 @@ async function resolveConcreteBlock(rpcUrl: string, blockIdentifier: string): Pr
 
   const normalizedBlockHex = normalizeHexString(blockObject.number, '0x0')
   const blobBaseFeeHex = await fetchBlobBaseFee(rpcUrl)
+  const chainId = await fetchChainId(rpcUrl)
 
   return {
     blockHex: normalizedBlockHex,
-    blockEnv: buildBlockEnv(blockObject, blobBaseFeeHex)
+    blockEnv: buildBlockEnv(blockObject, blobBaseFeeHex, chainId)
   }
 }
 

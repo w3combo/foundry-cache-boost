@@ -116,6 +116,19 @@ describe('main.ts', () => {
         method?: string
       }
 
+      if (parsed.method === 'eth_chainId') {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              jsonrpc: '2.0',
+              id: 1,
+              result: '0x1'
+            })
+        } as Response
+      }
+
       if (parsed.method === 'eth_getBlockByNumber') {
         return {
           ok: true,
@@ -250,7 +263,7 @@ describe('main.ts', () => {
     expect(parsed.meta.block_env.timestamp).toBe('0x69a74ec3')
     expect(parsed.meta.block_env.gas_limit).toBe(6000000)
     expect(parsed.meta.block_env.basefee).toBe(143867648)
-    expect(parsed.meta.block_env.difficulty).toBe('0x087353b2df9daa3c11ed7558e88cc9886f6bf7d0de9430c65f6308fd86576ce0')
+    expect(parsed.meta.block_env.difficulty).toBe('0x87353b2df9daa3c11ed7558e88cc9886f6bf7d0de9430c65f6308fd86576ce0')
     expect(parsed.meta.block_env.prevrandao).toBe('0x087353b2df9daa3c11ed7558e88cc9886f6bf7d0de9430c65f6308fd86576ce0')
     expect(parsed.meta.block_env.blob_excess_gas_and_price).toEqual({
       excess_blob_gas: 0,
@@ -408,6 +421,19 @@ describe('main.ts', () => {
         method?: string
       }
 
+      if (parsed.method === 'eth_chainId') {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              jsonrpc: '2.0',
+              id: 1,
+              result: '0x1'
+            })
+        } as Response
+      }
+
       if (parsed.method === 'eth_getBlockByNumber') {
         return {
           ok: true,
@@ -469,7 +495,7 @@ describe('main.ts', () => {
     }
 
     expect(parsed.meta.block_env.basefee).toBe(0)
-    expect(parsed.meta.block_env.prevrandao).toBe('0x0abc')
+    expect(parsed.meta.block_env.prevrandao).toBe('0x0000000000000000000000000000000000000000000000000000000000000abc')
     expect(parsed.meta.block_env.blob_excess_gas_and_price).toEqual({
       excess_blob_gas: 0,
       blob_gasprice: 1
